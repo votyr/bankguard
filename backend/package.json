@@ -1,0 +1,26 @@
+{
+  "name": "bankguard-sdk",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^10.0.0"
+  },
+  "description": "The banking application uses the external Scam2Safe service through [VisualPasswordService.js](src/services/VisualPasswordService.js). Controllers do not use Axios.",
+  "directories": {
+    "test": "test"
+  },
+  "devDependencies": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
