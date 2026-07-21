@@ -2,7 +2,8 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
+import { handleApiRequest } from "./src/routes.js";
+import { connectDB } from "./src/config/db.js";
 import { config } from "./src/config/loadEnv.js";
 import visualPasswordController from "./src/controllers/visualPasswordController.js";
 
@@ -60,10 +61,11 @@ const server = http.createServer(async (req, res) => {
 
     console.log(req.method, req.url);
 
-    if (req.method === "POST" && req.url.startsWith("/api/")) {
-        return visualPasswordController.handle(req, res);
+    if (req.url.startsWith("/api/")) {
+        const handled = await handleApiRequest(req, res);
+        if (handled) return;
+        return send(res, 404, { error: "Unknown API route" });
     }
-
     if (req.method === "GET") {
         return serveStatic(req, res);
     }
@@ -74,7 +76,11 @@ const server = http.createServer(async (req, res) => {
 const port = Number(config.PORT || 3001);
 
 server.listen(port, () => {
-    console.log(`Bank integration demo at http://localhost:${port}`);
+    connectDB().then(() => {
+        server.listen(port, () => {
+            console.log(`Bank integration demo at http://localhost:${port}`);
+        });
+    });
 });
 
 export { server };
