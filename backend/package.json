@@ -13,13 +13,13 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
+    "mongoose": "^9.8.0",
     "uuid": "^10.0.0"
   },
   "description": "The banking application uses the external Scam2Safe service through [VisualPasswordService.js](src/services/VisualPasswordService.js). Controllers do not use Axios.",
   "directories": {
     "test": "test"
   },
-  "devDependencies": {},
   "keywords": [],
   "author": "",
   "license": "ISC"
