@@ -75,11 +75,9 @@ const server = http.createServer(async (req, res) => {
 
 const port = Number(config.PORT || 3001);
 
-server.listen(port, () => {
-    connectDB().then(() => {
-        server.listen(port, () => {
-            console.log(`Bank integration demo at http://localhost:${port}`);
-        });
+connectDB().then(() => {
+    server.listen(port, () => {
+        console.log(`Bank integration demo at http://localhost:${port}`);
     });
 });
 
