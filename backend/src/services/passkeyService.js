@@ -57,9 +57,9 @@ export async function verifyRegistration(email, response) {
 
   await PasskeyCredential.create({
     email,
-    credentialId: Buffer.from(credential.id).toString("base64url"),
-    publicKey: Buffer.from(credential.publicKey).toString("base64url"),
-    counter: credential.counter,
+    credentialId: credentialID,
+    publicKey: Buffer.from(credentialPublicKey).toString("base64url"),
+    counter,
     transports: response.response?.transports || [],
   });
 
