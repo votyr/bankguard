@@ -1,5 +1,5 @@
 import Payment from "../models/Payment.js";
-import { initiateRazorpayPayout } from "./RazorpayService.js";
+import { initiateRazorpayPayout } from "./razorpayService.js";
 import { verifyTransactionChallenge } from "./VisualPasswordService.js";
 
 export async function createPayment({ transactionId, recipient, amount, reference }) {
