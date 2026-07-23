@@ -53,13 +53,13 @@ export async function verifyRegistration(email, response) {
     throw err;
   }
 
-  const { credential, } = verification.registrationInfo;
+  const { credential } = verification.registrationInfo;
 
   await PasskeyCredential.create({
     email,
-    credentialId: credentialID,
-    publicKey: Buffer.from(credentialPublicKey).toString("base64url"),
-    counter,
+    credentialId: credential.id,
+    publicKey: Buffer.from(credential.publicKey).toString("base64url"),
+    counter: credential.counter,
     transports: response.response?.transports || [],
   });
 
@@ -79,9 +79,9 @@ export async function getAuthenticationOptions(email) {
     rpID: config.RP_ID,
     userVerification: "required",
     allowCredentials: credentials.map((c) => ({
-      id: Buffer.from(c.credentialId, "base64url"),
+      id: c.credentialId,
       transports: c.transports,
-    })),
+    }))
   });
 
   pendingChallenges.set(email, options.challenge);
