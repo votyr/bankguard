@@ -198,7 +198,7 @@ export default function App() {
     setLoginError(null);
     setLoginPending(true);
     try {
-      const result = await apiPost('/api/auth/login-start', { email: loginEmail }, session.token);
+      const result = await apiPost('/auth/login-start', { email: loginEmail }, session.token);
       setLoginChallenge(result);
       setLoginOtp(['', '', '', '', '']);
       setScreen({ name: 'loginChallenge' });
@@ -219,7 +219,7 @@ export default function App() {
       return;
     }
     try {
-      const result = await apiPost('/api/auth/login-verify', {
+      const result = await apiPost('/auth/login-verify', {
         sessionId: loginChallenge.sessionId,
         registerInputs,
       },session.token);
@@ -240,7 +240,7 @@ export default function App() {
     setApiState({ lastCallLabel: 'POST /api/payments/create', lastCallAt: Date.now() });
 
     try {
-      await apiPost('/api/payments/create', {
+      await apiPost('/payments/create', {
         transactionId: freshTransactionId, // use the local var, not txDraft.transactionId (state hasn't updated yet)
         recipient: {
           name: txDraft.recipientName,
@@ -251,7 +251,7 @@ export default function App() {
         reference: txDraft.reference,
       }, session.token);
 
-      const result = await apiPost('/api/transactions/challenge', {
+      const result = await apiPost('/transactions/challenge', {
         email: txDraft.email,
         transactionId: freshTransactionId,
       }, session.token);
@@ -286,7 +286,7 @@ export default function App() {
       // show processing screen while the backend verifies + calls Razorpay
       setScreen({ name: 'processing' });
 
-      const result = await apiPost('/api/payments/confirm', {
+      const result = await apiPost('/payments/confirm', {
         transactionId: txDraft.transactionId,
         sessionId: challenge.sessionId,
         registerInputs,
@@ -312,7 +312,7 @@ export default function App() {
     setPasskeyBusy(true);
     setPasskeyStatus(null);
     try {
-      const options = await apiPost('/api/passkey/register-options', { email: txDraft.email },session.token);
+      const options = await apiPost('/passkey/register-options', { email: txDraft.email },session.token);
       const response = await startRegistration(options);
       await apiPost('/api/passkey/register-verify', { email: txDraft.email, response },session.token);
       setPasskeyStatus({ type: 'success', message: 'Passkey registered. You can now use it to recover your account.' });
@@ -327,7 +327,7 @@ export default function App() {
     setPasskeyBusy(true);
     setPasskeyStatus(null);
     try {
-      const options = await apiPost('/api/passkey/auth-options', { email: txDraft.email },session.token);
+      const options = await apiPost('/passkey/auth-options', { email: txDraft.email },session.token);
       const response = await startAuthentication(options);
       await apiPost('/api/passkey/auth-verify', { email: txDraft.email, response },session.token);
       setPasskeyStatus({ type: 'success', message: 'Verified with passkey. Account access restored.' });
@@ -343,7 +343,7 @@ export default function App() {
     resetChallengeState();
     setApiState({ lastCallLabel: 'POST /api/recovery/start', lastCallAt: Date.now() });
     try {
-      const result = await apiPost('/api/recovery/start', { email },session.token);
+      const result = await apiPost('/recovery/start', { email },session.token);
       setChallenge(result);
       setScreen({ name: 'recoveryChallenge', mode: 'recovery' });
       setApiState((s) => ({ ...s, lastCallResponse: result }));
