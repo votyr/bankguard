@@ -74,6 +74,7 @@ function OTPInputs({ count, values, onChange, disabled }) {
             const digit = e.target.value.replace(/\D/g, '').slice(-1);
             const next = [...values];
             next[idx] = digit;
+            console.log("OTP changed:", next);
             onChange(next);
             if (digit && idx < count - 1 && !disabled) refs.current[idx + 1]?.focus();
           }}
@@ -106,7 +107,7 @@ function RegisterLetters({ letters, values, onChange, error }) {
 }
 function ChallengeGrid({ masks }) {
   return (
-    <div className="challengeGrid" aria-label="Visual Password challenge grid">
+    <div className="challengeGrid" aria-label="Number challenge grid">
       {masks.map((cell, i) => (
         <div key={i} className="challengeCard" style={{ animationDelay: `${i * 35}ms` }}>
           <div className="challengeMask">{cell.mask}</div>
@@ -117,13 +118,13 @@ function ChallengeGrid({ masks }) {
   );
 }
 export default function App() {
-  const [screen, setScreen] = useState({ name: 'login' }); // was 'transactionForm'
+  const [screen, setScreen] = useState({ name: 'login' });
   const [apiState, setApiState] = useState({});
   const [challenge, setChallenge] = useState(null);
   const [formErrors, setFormErrors] = useState({});
-  const [passkeyStatus, setPasskeyStatus] = useState(null); // { type: 'success'|'error', message }
+  const [passkeyStatus, setPasskeyStatus] = useState(null);
   const [passkeyBusy, setPasskeyBusy] = useState(false);
-  const [session, setSession] = useState({ token: null, email: null }); // logged-in user
+  const [session, setSession] = useState({ token: null, email: null });
   const [loginChallenge, setLoginChallenge] = useState(null);
   const [loginOtp, setLoginOtp] = useState(['', '', '', '', '']);
   const [loginPending, setLoginPending] = useState(false);
@@ -153,9 +154,9 @@ export default function App() {
     transactionId: '',
     amount: 500000,
     recipientName: 'Rahul Sharma',
-    recipientAccountNumber: '',   // NEW
-    recipientIfsc: '',            // NEW
-    reference: '',                // NEW (optional)
+    recipientAccountNumber: '',
+    recipientIfsc: '',
+    reference: '',
   });
   const [otpValues, setOtpValues] = useState(['', '', '', '', '']);
   const [verifyPending, setVerifyPending] = useState(false);
@@ -191,6 +192,7 @@ export default function App() {
   async function verifyLogin() {
     setLoginPending(true);
     setLoginError(null);
+    
     const registerInputs = loginOtp.map((v) => Number(v));
     if (registerInputs.some((n) => !Number.isFinite(n))) {
       setLoginError('Enter all five register values.');
@@ -201,7 +203,7 @@ export default function App() {
       const result = await apiPost('/auth/login-verify', {
         sessionId: loginChallenge.sessionId,
         registerInputs,
-      },session.token);
+      }, session.token);
       setSession({ token: result.token, email: result.user?.email || loginEmail });
       setTxDraft((d) => ({ ...d, email: result.user?.email || loginEmail }));
       setScreen({ name: 'transactionForm' });
@@ -211,7 +213,9 @@ export default function App() {
       setLoginPending(false);
     }
   }
-  // Combined: creates the payment and confirms it immediately, with no
+  // Step 1: create the payment + request the number-box challenge.
+  // Does NOT call /payments/confirm — that only happens once the user
+  // types their 5 register digits, in verifyTransaction() below.
   async function startTransaction() {
     const freshTransactionId = `BANK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     setTxDraft((d) => ({ ...d, transactionId: freshTransactionId }));
@@ -244,14 +248,16 @@ export default function App() {
       setApiState((s) => ({ ...s, lastCallError: msg }));
     }
   }
-
+  // Step 2: user has typed their 5 register digits — now confirm.
   async function verifyTransaction() {
     if (!challenge) return;
     setVerifyPending(true);
     setVerifyError(null);
     setInputShake(false);
+    console.log("otpValues =", otpValues);
+      console.log("registerInputs =", otpValues.map(v => Number(v)));
     const registerInputs = otpValues.map((v) => Number(v));
-    if (registerInputs.some((n) => !Number.isFinite(n))) {
+    if (registerInputs.length !== 5 || registerInputs.some((n) => !Number.isFinite(n))) {
       setInputShake(true);
       setVerifyError('Enter all five register values.');
       setVerifyPending(false);
@@ -259,17 +265,17 @@ export default function App() {
     }
     setApiState({ lastCallLabel: 'POST /api/payments/confirm', lastCallAt: Date.now() });
     try {
-      // show processing screen while the backend verifies + calls Razorpay
       setScreen({ name: 'processing' });
       const result = await apiPost('/payments/confirm', {
         transactionId: txDraft.transactionId,
         sessionId: challenge.sessionId,
         registerInputs,
-      },session.token);
+      }, session.token);
       setApiState((s) => ({ ...s, lastCallResponse: result }));
       setSuccessData(result);
       setScreen({ name: 'success' });
       setVerifyPending(false);
+      
     } catch (e) {
       const msg = e?.message || String(e);
       setApiState((s) => ({ ...s, lastCallError: msg }));
@@ -282,9 +288,9 @@ export default function App() {
     setPasskeyBusy(true);
     setPasskeyStatus(null);
     try {
-      const options = await apiPost('/passkey/register-options', { email: txDraft.email },session.token);
+      const options = await apiPost('/passkey/register-options', { email: txDraft.email }, session.token);
       const response = await startRegistration(options);
-      await apiPost('/api/passkey/register-verify', { email: txDraft.email, response },session.token);
+      await apiPost('/api/passkey/register-verify', { email: txDraft.email, response }, session.token);
       setPasskeyStatus({ type: 'success', message: 'Passkey registered. You can now use it to recover your account.' });
     } catch (e) {
       setPasskeyStatus({ type: 'error', message: e?.message || 'Passkey registration failed.' });
@@ -296,9 +302,9 @@ export default function App() {
     setPasskeyBusy(true);
     setPasskeyStatus(null);
     try {
-      const options = await apiPost('/passkey/auth-options', { email: txDraft.email },session.token);
+      const options = await apiPost('/passkey/auth-options', { email: txDraft.email }, session.token);
       const response = await startAuthentication(options);
-      await apiPost('/api/passkey/auth-verify', { email: txDraft.email, response },session.token);
+      await apiPost('/api/passkey/auth-verify', { email: txDraft.email, response }, session.token);
       setPasskeyStatus({ type: 'success', message: 'Verified with passkey. Account access restored.' });
       setScreen({ name: 'transactionForm' });
     } catch (e) {
@@ -311,7 +317,7 @@ export default function App() {
     resetChallengeState();
     setApiState({ lastCallLabel: 'POST /api/recovery/start', lastCallAt: Date.now() });
     try {
-      const result = await apiPost('/recovery/start', { email },session.token);
+      const result = await apiPost('/recovery/start', { email }, session.token);
       setChallenge(result);
       setScreen({ name: 'recoveryChallenge', mode: 'recovery' });
       setApiState((s) => ({ ...s, lastCallResponse: result }));
@@ -365,50 +371,50 @@ export default function App() {
               {loginError ? <div className="warnCard">{loginError}</div> : null}
             </section>
           ) : null}
-            {screen.name === 'loginChallenge' ? (
-              <section className="screen fadeIn">
-                <div className="screenEyebrow">Verify</div>
-                <h1 className="screenTitle">Identity check</h1>
-                <p className="screenMuted">Find your secret number, then complete your register row.</p>
-                <div className="challengeGrid">
-                  {(loginChallenge?.boxes || []).map((box, i) => (
-                    <div key={i} className="challengeCard">
-                      <div className="challengeMask">{box.name}</div>
-                        <div className="challengeValue" style={{ fontSize: '0.85rem', display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
-                          {box.numbers.map((n, j) => (
-                            <span key={j}>{n}</span>
-                          ))}
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              minWidth: 22,
-                              padding: '1px 4px',
-                              borderRadius: '50%',
-                              border: '2px solid var(--gold)',
-                              fontWeight: 700,
-                              color: 'var(--navy)',
-                            }}
-                          >
-                            {box.circled}
-                          </span>
-                        </div>
+          {screen.name === 'loginChallenge' ? (
+            <section className="screen fadeIn">
+              <div className="screenEyebrow">Verify</div>
+              <h1 className="screenTitle">Identity check</h1>
+              <p className="screenMuted">Find your secret number, then complete your register row.</p>
+              <div className="challengeGrid">
+                {(loginChallenge?.boxes || []).map((box, i) => (
+                  <div key={i} className="challengeCard">
+                    <div className="challengeMask">{box.name}</div>
+                    <div className="challengeValue" style={{ fontSize: '0.85rem', display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
+                      {box.numbers.map((n, j) => (
+                        <span key={j}>{n}</span>
+                      ))}
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          minWidth: 22,
+                          padding: '1px 4px',
+                          borderRadius: '50%',
+                          border: '2px solid var(--gold)',
+                          fontWeight: 700,
+                          color: 'var(--navy)',
+                        }}
+                      >
+                        {box.circled}
+                      </span>
                     </div>
-                  ))}
-                </div>
-                <RegisterLetters
-                  letters={loginChallenge?.registerLetters || []}
-                  values={loginOtp}
-                  onChange={setLoginOtp}
-                  error={!!loginError}
-                />
-                <button className="btnPrimary" onClick={verifyLogin} disabled={loginPending}>
-                  {loginPending ? 'Verifying…' : 'Verify & sign in'}
-                </button>
-                {loginError ? <div className="errorInline">{loginError}</div> : null}
-              </section>
-            ) : null}
+                  </div>
+                ))}
+              </div>
+              <RegisterLetters
+                letters={loginChallenge?.registerLetters || []}
+                values={loginOtp}
+                onChange={setLoginOtp}
+                error={!!loginError}
+              />
+              <button className="btnPrimary" onClick={verifyLogin} disabled={loginPending}>
+                {loginPending ? 'Verifying…' : 'Verify & sign in'}
+              </button>
+              {loginError ? <div className="errorInline">{loginError}</div> : null}
+            </section>
+          ) : null}
           {screen.name === 'transactionForm' ? (
             <section className="screen fadeIn">
               <div className="screenEyebrow">New transfer</div>
@@ -531,46 +537,15 @@ export default function App() {
               <div className="finePrint">This step confirms it's really you — never share these values.</div>
             </section>
           ) : null}
-          {screen.name === 'recoveryChallenge' ? (
+          {screen.name === 'processing' ? (
             <section className="screen fadeIn">
-              <div className="screenEyebrow">Verify</div>
-              <h1 className="screenTitle">Visual Password</h1>
-              <p className="screenMuted">Find your word, then complete your register row.</p>
-              <ChallengeGrid masks={maskOnlyGrid(challenge?.challengeGrid)} />
-              <RegisterLetters
-                letters={challenge?.registerLetters || []}
-                values={otpValues}
-                onChange={(next) => {
-                  setOtpValues(next);
-                  if (inputShake) setInputShake(false);
-                  setVerifyError(null);
-                }}
-                error={!!verifyError}
-              />
-              <button
-                className={`btnPrimary ${verifyPending ? 'btnDisabled' : ''}`}
-                onClick={verifyTransaction}
-                disabled={verifyPending}
-              >
-                {verifyPending ? (
-                  <span className="spinnerWrap"><span className="spinner" />Verifying…</span>
-                ) : (
-                  'Authorize payment'
-                )}
-              </button>
-              {verifyError ? <div className="errorInline">{verifyError}</div> : null}
-              <div className="finePrint">This step confirms it's really you — never share these values.</div>
+              <div className="successWrap">
+                <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3, borderColor: 'rgba(11,30,61,0.15)', borderTopColor: 'var(--navy)' }} />
+                <div className="successTitle" style={{ marginTop: 12 }}>Processing payment</div>
+                <div className="successSub">Verifying and transferring funds — this takes a few seconds.</div>
+              </div>
             </section>
           ) : null}
-          {screen.name === 'processing' ? (
-                <section className="screen fadeIn">
-                  <div className="successWrap">
-                    <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3, borderColor: 'rgba(11,30,61,0.15)', borderTopColor: 'var(--navy)' }} />
-                    <div className="successTitle" style={{ marginTop: 12 }}>Processing payment</div>
-                    <div className="successSub">Verifying and transferring funds — this takes a few seconds.</div>
-                  </div>
-                </section>
-              ) : null}
           {screen.name === 'success' ? (
             <section className="screen fadeIn">
               <div className="successWrap">
@@ -592,7 +567,7 @@ export default function App() {
               >
                 {passkeyBusy ? 'Setting up passkey…' : '+ Add a passkey for faster recovery'}
               </button>
-              
+
               <button className="btnPrimary" onClick={() => setScreen({ name: 'transactionForm' })}>
                 Done
               </button>
