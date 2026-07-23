@@ -79,7 +79,7 @@ export async function getAuthenticationOptions(email) {
     rpID: config.RP_ID,
     userVerification: "required",
     allowCredentials: credentials.map((c) => ({
-      id: c.credentialId,
+      id: Buffer.from(c.credentialId, "base64url"),
       transports: c.transports,
     })),
   });
