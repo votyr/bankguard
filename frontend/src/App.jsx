@@ -232,7 +232,7 @@ export default function App() {
     try {
       const options = await apiPost('/passkey/register-options', { email: txDraft.email }, session.token);
       const response = await startRegistration(options);
-      await apiPost('/api/passkey/register-verify', { email: txDraft.email, response }, session.token);
+      await apiPost('/passkey/register-verify', { email: txDraft.email, response }, session.token);
       setPasskeyStatus({ type: 'success', message: 'Passkey registered. You can now use it to recover your account.' });
     } catch (e) {
       setPasskeyStatus({ type: 'error', message: e?.message || 'Passkey registration failed.' });
@@ -246,7 +246,7 @@ export default function App() {
     try {
       const options = await apiPost('/passkey/auth-options', { email: txDraft.email }, session.token);
       const response = await startAuthentication(options);
-      await apiPost('/api/passkey/auth-verify', { email: txDraft.email, response }, session.token);
+      await apiPost('/passkey/auth-verify', { email: txDraft.email, response }, session.token);
       setPasskeyStatus({ type: 'success', message: 'Verified with passkey. Account access restored.' });
       setScreen({ name: 'transactionForm' });
     } catch (e) {
