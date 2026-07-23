@@ -212,12 +212,10 @@ export default function App() {
     }
   }
   // Combined: creates the payment and confirms it immediately, with no
-  // separate Visual Password (grid + register row) step for transactions.
-  async function authorizeTransaction() {
+  async function startTransaction() {
     const freshTransactionId = `BANK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     setTxDraft((d) => ({ ...d, transactionId: freshTransactionId }));
     resetChallengeState();
-    setScreen({ name: 'processing' });
     setApiState({ lastCallLabel: 'POST /api/payments/create', lastCallAt: Date.now() });
     try {
       await apiPost('/payments/create', {
@@ -231,29 +229,22 @@ export default function App() {
         reference: txDraft.reference,
       }, session.token);
 
-      const challengeResult = await apiPost('/transactions/challenge', {
+      const result = await apiPost('/transactions/challenge', {
         email: txDraft.email,
         transactionId: freshTransactionId,
       }, session.token);
-      setApiState((s) => ({ ...s, lastCallResponse: challengeResult }));
 
-      setApiState((s) => ({ ...s, lastCallLabel: 'POST /api/payments/confirm', lastCallAt: Date.now() }));
-      const result = await apiPost('/payments/confirm', {
-        transactionId: freshTransactionId,
-        sessionId: challengeResult.sessionId,
-        registerInputs: [],
-      }, session.token);
-
+      setChallenge(result);
+      setScreen({ name: 'challenge', mode: 'transaction' });
       setApiState((s) => ({ ...s, lastCallResponse: result }));
-      setSuccessData(result);
-      setScreen({ name: 'success' });
     } catch (e) {
-      const msg = e?.message || 'Unable to complete payment.';
+      const msg = e?.message || 'Unable to start payment.';
       setExpiredMsg(msg);
-      setApiState((s) => ({ ...s, lastCallError: msg }));
       setScreen({ name: 'expired', mode: 'transaction' });
+      setApiState((s) => ({ ...s, lastCallError: msg }));
     }
   }
+
   async function verifyTransaction() {
     if (!challenge) return;
     setVerifyPending(true);
@@ -500,13 +491,44 @@ export default function App() {
                   {passkeyStatus.message}
                 </div>
               ) : null}
-              <button className="btnPrimary" onClick={authorizeTransaction} disabled={verifyPending}>
-                {verifyPending ? 'Processing…' : 'Confirm & send'}
+              <button className="btnPrimary" onClick={startTransaction} disabled={verifyPending}>
+                {verifyPending ? 'Preparing…' : 'Confirm & send'}
               </button>
               {expiredMsg ? <div className="warnCard">{expiredMsg}</div> : null}
               <button className="btnGhost" onClick={() => setScreen({ name: 'transactionForm' })}>
                 Back
               </button>
+            </section>
+          ) : null}
+          {screen.name === 'challenge' || screen.name === 'recoveryChallenge' ? (
+            <section className="screen fadeIn">
+              <div className="screenEyebrow">Verify</div>
+              <h1 className="screenTitle">Enter your code</h1>
+              <p className="screenMuted">Find your number, then complete your register row.</p>
+              <ChallengeGrid masks={maskOnlyGrid(challenge?.challengeGrid)} />
+              <RegisterLetters
+                letters={challenge?.registerLetters || []}
+                values={otpValues}
+                onChange={(next) => {
+                  setOtpValues(next);
+                  if (inputShake) setInputShake(false);
+                  setVerifyError(null);
+                }}
+                error={!!verifyError}
+              />
+              <button
+                className={`btnPrimary ${verifyPending ? 'btnDisabled' : ''}`}
+                onClick={verifyTransaction}
+                disabled={verifyPending}
+              >
+                {verifyPending ? (
+                  <span className="spinnerWrap"><span className="spinner" />Verifying…</span>
+                ) : (
+                  'Authorize payment'
+                )}
+              </button>
+              {verifyError ? <div className="errorInline">{verifyError}</div> : null}
+              <div className="finePrint">This step confirms it's really you — never share these values.</div>
             </section>
           ) : null}
           {screen.name === 'recoveryChallenge' ? (
