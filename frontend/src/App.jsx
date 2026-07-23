@@ -45,12 +45,6 @@ function formatAmountINR(amount) {
     return `₹${amount}`;
   }
 }
-function maskOnlyGrid(grid) {
-  const arr = Array.isArray(grid) ? grid : [];
-  const nine = arr.slice(0, 9);
-  while (nine.length < 9) nine.push({ mask: '' });
-  return nine;
-}
 function OTPInputs({ count, values, onChange, disabled }) {
   const refs = useRef([]);
   useEffect(() => {
@@ -74,7 +68,6 @@ function OTPInputs({ count, values, onChange, disabled }) {
             const digit = e.target.value.replace(/\D/g, '').slice(-1);
             const next = [...values];
             next[idx] = digit;
-            console.log("OTP changed:", next);
             onChange(next);
             if (digit && idx < count - 1 && !disabled) refs.current[idx + 1]?.focus();
           }}
@@ -105,22 +98,9 @@ function RegisterLetters({ letters, values, onChange, error }) {
     </div>
   );
 }
-function ChallengeGrid({ masks }) {
-  return (
-    <div className="challengeGrid" aria-label="Number challenge grid">
-      {masks.map((cell, i) => (
-        <div key={i} className="challengeCard" style={{ animationDelay: `${i * 35}ms` }}>
-          <div className="challengeMask">{cell.mask}</div>
-          <div className="challengeValue">{cell.value}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
 export default function App() {
   const [screen, setScreen] = useState({ name: 'login' });
   const [apiState, setApiState] = useState({});
-  const [challenge, setChallenge] = useState(null);
   const [formErrors, setFormErrors] = useState({});
   const [passkeyStatus, setPasskeyStatus] = useState(null);
   const [passkeyBusy, setPasskeyBusy] = useState(false);
@@ -158,17 +138,11 @@ export default function App() {
     recipientIfsc: '',
     reference: '',
   });
-  const [otpValues, setOtpValues] = useState(['', '', '', '', '']);
-  const [verifyPending, setVerifyPending] = useState(false);
-  const [inputShake, setInputShake] = useState(false);
-  const [verifyError, setVerifyError] = useState(null);
+  const [txPending, setTxPending] = useState(false);
   const [expiredMsg, setExpiredMsg] = useState(null);
   const [successData, setSuccessData] = useState(null);
   function resetChallengeState() {
-    setOtpValues(['', '', '', '', '']);
-    setVerifyPending(false);
-    setInputShake(false);
-    setVerifyError(null);
+    setTxPending(false);
     setExpiredMsg(null);
     setSuccessData(null);
   }
@@ -192,7 +166,7 @@ export default function App() {
   async function verifyLogin() {
     setLoginPending(true);
     setLoginError(null);
-    
+
     const registerInputs = loginOtp.map((v) => Number(v));
     if (registerInputs.some((n) => !Number.isFinite(n))) {
       setLoginError('Enter all five register values.');
@@ -213,16 +187,18 @@ export default function App() {
       setLoginPending(false);
     }
   }
-  // Step 1: create the payment + request the number-box challenge.
-  // Does NOT call /payments/confirm — that only happens once the user
-  // types their 5 register digits, in verifyTransaction() below.
+  // Single-step transaction flow: the user already authenticated the whole
+  // session via the login visual challenge, so no second challenge is needed
+  // here. We create the payment, then immediately confirm it.
   async function startTransaction() {
     const freshTransactionId = `BANK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     setTxDraft((d) => ({ ...d, transactionId: freshTransactionId }));
     resetChallengeState();
+    setTxPending(true);
     setApiState({ lastCallLabel: 'POST /api/payments/create', lastCallAt: Date.now() });
+    setScreen({ name: 'processing' });
     try {
-      await apiPost('/payments/create', {
+      const createResult = await apiPost('/payments/create', {
         transactionId: freshTransactionId,
         recipient: {
           name: txDraft.recipientName,
@@ -232,56 +208,22 @@ export default function App() {
         amount: txDraft.amount,
         reference: txDraft.reference,
       }, session.token);
+      setApiState((s) => ({ ...s, lastCallResponse: createResult }));
 
-      const result = await apiPost('/transactions/challenge', {
-        email: txDraft.email,
+      setApiState((s) => ({ ...s, lastCallLabel: 'POST /api/payments/confirm', lastCallAt: Date.now() }));
+      const confirmResult = await apiPost('/payments/confirm', {
         transactionId: freshTransactionId,
       }, session.token);
-
-      setChallenge(result);
-      setScreen({ name: 'challenge', mode: 'transaction' });
-      setApiState((s) => ({ ...s, lastCallResponse: result }));
-    } catch (e) {
-      const msg = e?.message || 'Unable to start payment.';
-      setExpiredMsg(msg);
-      setScreen({ name: 'expired', mode: 'transaction' });
-      setApiState((s) => ({ ...s, lastCallError: msg }));
-    }
-  }
-  // Step 2: user has typed their 5 register digits — now confirm.
-  async function verifyTransaction() {
-    if (!challenge) return;
-    setVerifyPending(true);
-    setVerifyError(null);
-    setInputShake(false);
-    console.log("otpValues =", otpValues);
-      console.log("registerInputs =", otpValues.map(v => Number(v)));
-    const registerInputs = otpValues.map((v) => Number(v));
-    if (registerInputs.length !== 5 || registerInputs.some((n) => !Number.isFinite(n))) {
-      setInputShake(true);
-      setVerifyError('Enter all five register values.');
-      setVerifyPending(false);
-      return;
-    }
-    setApiState({ lastCallLabel: 'POST /api/payments/confirm', lastCallAt: Date.now() });
-    try {
-      setScreen({ name: 'processing' });
-      const result = await apiPost('/payments/confirm', {
-        transactionId: txDraft.transactionId,
-        sessionId: challenge.sessionId,
-        registerInputs,
-      }, session.token);
-      setApiState((s) => ({ ...s, lastCallResponse: result }));
-      setSuccessData(result);
+      setApiState((s) => ({ ...s, lastCallResponse: confirmResult }));
+      setSuccessData(confirmResult);
+      setTxPending(false);
       setScreen({ name: 'success' });
-      setVerifyPending(false);
-      
     } catch (e) {
-      const msg = e?.message || String(e);
-      setApiState((s) => ({ ...s, lastCallError: msg }));
+      const msg = e?.message || 'Unable to complete payment.';
       setExpiredMsg(msg);
+      setTxPending(false);
+      setApiState((s) => ({ ...s, lastCallError: msg }));
       setScreen({ name: 'expired', mode: 'transaction' });
-      setVerifyPending(false);
     }
   }
   async function registerPasskey() {
@@ -318,7 +260,6 @@ export default function App() {
     setApiState({ lastCallLabel: 'POST /api/recovery/start', lastCallAt: Date.now() });
     try {
       const result = await apiPost('/recovery/start', { email }, session.token);
-      setChallenge(result);
       setScreen({ name: 'recoveryChallenge', mode: 'recovery' });
       setApiState((s) => ({ ...s, lastCallResponse: result }));
     } catch (e) {
@@ -497,8 +438,8 @@ export default function App() {
                   {passkeyStatus.message}
                 </div>
               ) : null}
-              <button className="btnPrimary" onClick={startTransaction} disabled={verifyPending}>
-                {verifyPending ? 'Preparing…' : 'Confirm & send'}
+              <button className="btnPrimary" onClick={startTransaction} disabled={txPending}>
+                {txPending ? 'Preparing…' : 'Confirm & send'}
               </button>
               {expiredMsg ? <div className="warnCard">{expiredMsg}</div> : null}
               <button className="btnGhost" onClick={() => setScreen({ name: 'transactionForm' })}>
