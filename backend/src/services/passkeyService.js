@@ -53,13 +53,13 @@ export async function verifyRegistration(email, response) {
     throw err;
   }
 
-  const { credentialID, credentialPublicKey, counter } = verification.registrationInfo;
+  const { credential, } = verification.registrationInfo;
 
   await PasskeyCredential.create({
     email,
-    credentialId: Buffer.from(credentialID).toString("base64url"),
-    publicKey: Buffer.from(credentialPublicKey).toString("base64url"),
-    counter,
+    credentialId: Buffer.from(credential.id).toString("base64url"),
+    publicKey: Buffer.from(credential.publicKey).toString("base64url"),
+    counter: credential.counter,
     transports: response.response?.transports || [],
   });
 
