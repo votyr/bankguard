@@ -9,7 +9,11 @@ async function apiPost(path, body) {
     body: JSON.stringify(body),
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data?.error || 'Request failed');
+  if (!response.ok) {
+    const err = new Error(data?.error || 'Request failed');
+    err.status = response.status;
+    throw err;
+  }
   return data;
 }
 
@@ -124,6 +128,29 @@ export default function App() {
   const [screen, setScreen] = useState({ name: 'transactionForm' });
   const [apiState, setApiState] = useState({});
   const [challenge, setChallenge] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
+
+  function validateBankDetails() {
+    const errors = {};
+    const ifsc = txDraft.recipientIfsc.trim();
+    const acc = txDraft.recipientAccountNumber.trim();
+
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+      errors.ifsc = 'IFSC must be 11 characters: 4 letters, a 0, then 6 letters/numbers (e.g. HDFC0001234).';
+    }
+    if (!/^[0-9]{9,18}$/.test(acc)) {
+      errors.account = 'Account number should be 9–18 digits.';
+    }
+    if (!txDraft.recipientName.trim()) {
+      errors.name = 'Recipient name is required.';
+    }
+    if (!txDraft.amount || txDraft.amount <= 0) {
+      errors.amount = 'Enter a valid amount.';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
 
   const [txDraft, setTxDraft] = useState({
     email: 'bankguard@mail.com',
@@ -222,16 +249,10 @@ export default function App() {
       const msg = e?.message || String(e);
       setApiState((s) => ({ ...s, lastCallError: msg }));
 
-      const isExpired = /expired|session|time/i.test(msg);
-      if (isExpired) {
-        setExpiredMsg(msg);
-        setScreen({ name: 'expired', mode: 'transaction' });
-      } else {
-        // go back to challenge screen to show the error rather than staying on processing
-        setScreen({ name: 'challenge', mode: 'transaction' });
-        setInputShake(true);
-        setVerifyError(msg);
-      }
+      // 401 = Scam2Safe verification actually failed/expired -> needs a fresh challenge
+      // Anything else (400/402/409/500/502) = payment-side error, session is still burned either way
+      setExpiredMsg(msg);
+      setScreen({ name: 'expired', mode: 'transaction' });
       setVerifyPending(false);
     }
   }
@@ -306,6 +327,7 @@ export default function App() {
                   value={txDraft.recipientAccountNumber}
                   onChange={(e) => setTxDraft((d) => ({ ...d, recipientAccountNumber: e.target.value }))}
                 />
+                {formErrors.account ? <div className="errorText">{formErrors.account}</div> : null}
               </label>
 
               <label className="field">
@@ -315,6 +337,7 @@ export default function App() {
                   value={txDraft.recipientIfsc}
                   onChange={(e) => setTxDraft((d) => ({ ...d, recipientIfsc: e.target.value.toUpperCase() }))}
                 />
+                {formErrors.ifsc ? <div className="errorText">{formErrors.ifsc}</div> : null}
               </label>
 
               <label className="field">
@@ -330,7 +353,12 @@ export default function App() {
                 <span>Account</span><span>{txDraft.recipientAccountNumber ? `········${txDraft.recipientAccountNumber.slice(-4)}` : '—'}</span>
               </div>
 
-              <button className="btnPrimary" onClick={() => setScreen({ name: 'transactionConfirm' })}>
+              <button
+                className="btnPrimary"
+                onClick={() => {
+                  if (validateBankDetails()) setScreen({ name: 'transactionConfirm' });
+                }}
+              >
                 Review transfer <ArrowIcon />
               </button>
 
@@ -411,15 +439,7 @@ export default function App() {
             </section>
           ) : null}
 
-          {screen.name === 'success' ? (
-            <section className="screen fadeIn">
-              <div className="successWrap">
-                <div className="successCheck">✓</div>
-                <div className="successTitle">Payment sent</div>
-                <div className="successSub">{formatAmountINR(Number(successData?.amount || txDraft.amount))} to {txDraft.recipientName}</div>
-              </div>
-
-              {screen.name === 'processing' ? (
+          {screen.name === 'processing' ? (
                 <section className="screen fadeIn">
                   <div className="successWrap">
                     <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3, borderColor: 'rgba(11,30,61,0.15)', borderTopColor: 'var(--navy)' }} />
@@ -428,6 +448,14 @@ export default function App() {
                   </div>
                 </section>
               ) : null}
+
+          {screen.name === 'success' ? (
+            <section className="screen fadeIn">
+              <div className="successWrap">
+                <div className="successCheck">✓</div>
+                <div className="successTitle">Payment sent</div>
+                <div className="successSub">{formatAmountINR(Number(successData?.amount || txDraft.amount))} to {txDraft.recipientName}</div>
+              </div>
 
               <div className="receiptCard">
                 <div className="receiptRow"><span>Recipient</span><span>{txDraft.recipientName}</span></div>

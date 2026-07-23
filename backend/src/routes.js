@@ -50,7 +50,9 @@ async function runController(req, res, handlerFn) {
     const result = await handlerFn(body);
     send(res, 200, result);
   } catch (err) {
-    send(res, err.status || 500, { error: err.message });
+    // Log full detail so we can actually see what broke
+    console.error("Payment error:", err.response?.data || err.message, err.stack);
+    send(res, err.status || 500, { error: err.message || "Internal server error" });
   }
 }
 

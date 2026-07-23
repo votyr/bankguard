@@ -53,22 +53,30 @@ export async function confirmPayment({ transactionId, sessionId, registerInputs 
 
     return { status: "SUCCESS", transactionId, payoutId: payout.id };
   } catch (err) {
+    console.error("====== RAZORPAY ERROR ======");
+    console.error(err);
+
+    if (err.response) {
+      console.error("Status:", err.response.status);
+      console.error("Body:", err.response.data);
+    }
+
     payment.status = "FAILED";
     await payment.save();
 
-    if (err.code === "ECONNABORTED") {
-      const e = new Error("Payment provider timed out. Please try again.");
-      e.status = 504;
+    // Forward Razorpay's message to the frontend
+    if (err.response?.data?.error) {
+      const razorpayError = err.response.data.error;
+
+      const e = new Error(
+        razorpayError.description || "Payment provider error"
+      );
+      e.status = err.response.status;
+
       throw e;
     }
-    if (err.response?.status === 400 && err.response?.data?.error?.description?.includes("balance")) {
-      const e = new Error("Insufficient funds.");
-      e.status = 402;
-      throw e;
-    }
-    const e = new Error("Payment failed. Please try again later.");
-    e.status = 500;
-    throw e;
+
+    throw err;
   }
 }
 
