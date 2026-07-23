@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
-
 const baseApiUrl = import.meta.env.VITE_API_BASE_URL;
-
 async function apiPost(path, body, token) {
   const response = await fetch(`${baseApiUrl}${path}`, {
     method: 'POST',
@@ -20,7 +18,6 @@ async function apiPost(path, body, token) {
   }
   return data;
 }
-
 function ShieldIcon({ size = 18 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -34,7 +31,6 @@ function ShieldIcon({ size = 18 }) {
     </svg>
   );
 }
-
 function ArrowIcon({ size = 16 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -42,7 +38,6 @@ function ArrowIcon({ size = 16 }) {
     </svg>
   );
 }
-
 function formatAmountINR(amount) {
   try {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
@@ -50,22 +45,18 @@ function formatAmountINR(amount) {
     return `₹${amount}`;
   }
 }
-
 function maskOnlyGrid(grid) {
   const arr = Array.isArray(grid) ? grid : [];
   const nine = arr.slice(0, 9);
   while (nine.length < 9) nine.push({ mask: '' });
   return nine;
 }
-
 function OTPInputs({ count, values, onChange, disabled }) {
   const refs = useRef([]);
-
   useEffect(() => {
     const firstEmpty = values.findIndex((v) => !v);
     if (firstEmpty !== -1 && !disabled) refs.current[firstEmpty]?.focus();
   }, [disabled]);
-
   return (
     <div className="otpRow">
       {Array.from({ length: count }).map((_, idx) => (
@@ -100,7 +91,6 @@ function OTPInputs({ count, values, onChange, disabled }) {
     </div>
   );
 }
-
 function RegisterLetters({ letters, values, onChange, error }) {
   return (
     <div className={`registerBlock ${error ? 'shake' : ''}`}>
@@ -114,7 +104,6 @@ function RegisterLetters({ letters, values, onChange, error }) {
     </div>
   );
 }
-
 function ChallengeGrid({ masks }) {
   return (
     <div className="challengeGrid" aria-label="Visual Password challenge grid">
@@ -127,7 +116,6 @@ function ChallengeGrid({ masks }) {
     </div>
   );
 }
-
 export default function App() {
   const [screen, setScreen] = useState({ name: 'login' }); // was 'transactionForm'
   const [apiState, setApiState] = useState({});
@@ -141,12 +129,10 @@ export default function App() {
   const [loginPending, setLoginPending] = useState(false);
   const [loginError, setLoginError] = useState(null);
   const [loginEmail, setLoginEmail] = useState('');
-
   function validateBankDetails() {
     const errors = {};
     const ifsc = txDraft.recipientIfsc.trim();
     const acc = txDraft.recipientAccountNumber.trim();
-
     if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
       errors.ifsc = 'IFSC must be 11 characters: 4 letters, a 0, then 6 letters/numbers (e.g. HDFC0001234).';
     }
@@ -159,11 +145,9 @@ export default function App() {
     if (!txDraft.amount || txDraft.amount <= 0) {
       errors.amount = 'Enter a valid amount.';
     }
-
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   }
-
   const [txDraft, setTxDraft] = useState({
     email: 'bankguard@mail.com',
     transactionId: '',
@@ -173,14 +157,12 @@ export default function App() {
     recipientIfsc: '',            // NEW
     reference: '',                // NEW (optional)
   });
-
   const [otpValues, setOtpValues] = useState(['', '', '', '', '']);
   const [verifyPending, setVerifyPending] = useState(false);
   const [inputShake, setInputShake] = useState(false);
   const [verifyError, setVerifyError] = useState(null);
   const [expiredMsg, setExpiredMsg] = useState(null);
   const [successData, setSuccessData] = useState(null);
-
   function resetChallengeState() {
     setOtpValues(['', '', '', '', '']);
     setVerifyPending(false);
@@ -189,11 +171,9 @@ export default function App() {
     setExpiredMsg(null);
     setSuccessData(null);
   }
-
   useEffect(() => {
     setTxDraft((d) => ({ ...d, transactionId: `BANK-${Date.now()}` }));
   }, []);
-
   async function startLogin() {
     setLoginError(null);
     setLoginPending(true);
@@ -208,7 +188,6 @@ export default function App() {
       setLoginPending(false);
     }
   }
-
   async function verifyLogin() {
     setLoginPending(true);
     setLoginError(null);
@@ -232,16 +211,17 @@ export default function App() {
       setLoginPending(false);
     }
   }
-
-  async function startTransaction() {
+  // Combined: creates the payment and confirms it immediately, with no
+  // separate Visual Password (grid + register row) step for transactions.
+  async function authorizeTransaction() {
     const freshTransactionId = `BANK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     setTxDraft((d) => ({ ...d, transactionId: freshTransactionId }));
     resetChallengeState();
+    setScreen({ name: 'processing' });
     setApiState({ lastCallLabel: 'POST /api/payments/create', lastCallAt: Date.now() });
-
     try {
       await apiPost('/payments/create', {
-        transactionId: freshTransactionId, // use the local var, not txDraft.transactionId (state hasn't updated yet)
+        transactionId: freshTransactionId,
         recipient: {
           name: txDraft.recipientName,
           accountNumber: txDraft.recipientAccountNumber,
@@ -251,27 +231,34 @@ export default function App() {
         reference: txDraft.reference,
       }, session.token);
 
-      const result = await apiPost('/transactions/challenge', {
+      const challengeResult = await apiPost('/transactions/challenge', {
         email: txDraft.email,
         transactionId: freshTransactionId,
       }, session.token);
-      setChallenge(result);
-      setScreen({ name: 'challenge', mode: 'transaction' });
+      setApiState((s) => ({ ...s, lastCallResponse: challengeResult }));
+
+      setApiState((s) => ({ ...s, lastCallLabel: 'POST /api/payments/confirm', lastCallAt: Date.now() }));
+      const result = await apiPost('/payments/confirm', {
+        transactionId: freshTransactionId,
+        sessionId: challengeResult.sessionId,
+        registerInputs: [],
+      }, session.token);
+
       setApiState((s) => ({ ...s, lastCallResponse: result }));
+      setSuccessData(result);
+      setScreen({ name: 'success' });
     } catch (e) {
-      const msg = e?.message || 'Unable to start payment.';
+      const msg = e?.message || 'Unable to complete payment.';
       setExpiredMsg(msg);
-      setScreen({ name: 'expired', mode: 'transaction' });
       setApiState((s) => ({ ...s, lastCallError: msg }));
+      setScreen({ name: 'expired', mode: 'transaction' });
     }
   }
-
   async function verifyTransaction() {
     if (!challenge) return;
     setVerifyPending(true);
     setVerifyError(null);
     setInputShake(false);
-
     const registerInputs = otpValues.map((v) => Number(v));
     if (registerInputs.some((n) => !Number.isFinite(n))) {
       setInputShake(true);
@@ -279,19 +266,15 @@ export default function App() {
       setVerifyPending(false);
       return;
     }
-
     setApiState({ lastCallLabel: 'POST /api/payments/confirm', lastCallAt: Date.now() });
-
     try {
       // show processing screen while the backend verifies + calls Razorpay
       setScreen({ name: 'processing' });
-
       const result = await apiPost('/payments/confirm', {
         transactionId: txDraft.transactionId,
         sessionId: challenge.sessionId,
         registerInputs,
       },session.token);
-
       setApiState((s) => ({ ...s, lastCallResponse: result }));
       setSuccessData(result);
       setScreen({ name: 'success' });
@@ -299,15 +282,11 @@ export default function App() {
     } catch (e) {
       const msg = e?.message || String(e);
       setApiState((s) => ({ ...s, lastCallError: msg }));
-
-      // 401 = Scam2Safe verification actually failed/expired -> needs a fresh challenge
-      // Anything else (400/402/409/500/502) = payment-side error, session is still burned either way
       setExpiredMsg(msg);
       setScreen({ name: 'expired', mode: 'transaction' });
       setVerifyPending(false);
     }
   }
-
   async function registerPasskey() {
     setPasskeyBusy(true);
     setPasskeyStatus(null);
@@ -322,7 +301,6 @@ export default function App() {
       setPasskeyBusy(false);
     }
   }
-
   async function recoverWithPasskey() {
     setPasskeyBusy(true);
     setPasskeyStatus(null);
@@ -338,7 +316,6 @@ export default function App() {
       setPasskeyBusy(false);
     }
   }
-
   async function startRecovery(email) {
     resetChallengeState();
     setApiState({ lastCallLabel: 'POST /api/recovery/start', lastCallAt: Date.now() });
@@ -354,11 +331,9 @@ export default function App() {
       setApiState((s) => ({ ...s, lastCallError: msg }));
     }
   }
-
   return (
     <div className="appRoot">
       <style>{CSS}</style>
-
       <header className="topHeader">
         <div className="brand">
           <div className="shieldWrap"><ShieldIcon size={20} /></div>
@@ -371,23 +346,19 @@ export default function App() {
           <span className="statusDot" /> Encrypted session
         </div>
       </header>
-
       {session.email ? (
         <button className="btnGhost" onClick={() => { setSession({ token: null, email: null }); setScreen({ name: 'login' }); }}>
           Sign out ({session.email})
         </button>
       ) : null}
-
       <main className="stage">
         <div className="phoneFrame">
           <div className="phoneNotch" />
-
           {screen.name === 'login' ? (
             <section className="screen fadeIn">
               <div className="screenEyebrow">Sign in</div>
               <h1 className="screenTitle">Welcome to BankGuard</h1>
               <p className="screenMuted">Enter your email to begin identity verification.</p>
-
               <label className="field">
                 <span className="fieldLabel">Email</span>
                 <input
@@ -397,21 +368,17 @@ export default function App() {
                   onChange={(e) => setLoginEmail(e.target.value)}
                 />
               </label>
-
               <button className="btnPrimary" onClick={startLogin} disabled={loginPending}>
                 {loginPending ? 'Starting…' : 'Continue'}
               </button>
-
               {loginError ? <div className="warnCard">{loginError}</div> : null}
             </section>
           ) : null}
-
             {screen.name === 'loginChallenge' ? (
               <section className="screen fadeIn">
                 <div className="screenEyebrow">Verify</div>
                 <h1 className="screenTitle">Identity check</h1>
                 <p className="screenMuted">Find your secret number, then complete your register row.</p>
-
                 <div className="challengeGrid">
                   {(loginChallenge?.boxes || []).map((box, i) => (
                     <div key={i} className="challengeCard">
@@ -439,28 +406,23 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-
                 <RegisterLetters
                   letters={loginChallenge?.registerLetters || []}
                   values={loginOtp}
                   onChange={setLoginOtp}
                   error={!!loginError}
                 />
-
                 <button className="btnPrimary" onClick={verifyLogin} disabled={loginPending}>
                   {loginPending ? 'Verifying…' : 'Verify & sign in'}
                 </button>
-
                 {loginError ? <div className="errorInline">{loginError}</div> : null}
               </section>
             ) : null}
-
           {screen.name === 'transactionForm' ? (
             <section className="screen fadeIn">
               <div className="screenEyebrow">New transfer</div>
               <h1 className="screenTitle">Send money</h1>
               <p className="screenMuted">Enter the amount and recipient to begin.</p>
-
               <div className="amountField">
                 <span className="amountCurrency">₹</span>
                 <input
@@ -471,7 +433,6 @@ export default function App() {
                   onChange={(e) => setTxDraft((d) => ({ ...d, amount: Number(e.target.value) }))}
                 />
               </div>
-
               <label className="field">
                 <span className="fieldLabel">Recipient name</span>
                 <input
@@ -480,7 +441,6 @@ export default function App() {
                   onChange={(e) => setTxDraft((d) => ({ ...d, recipientName: e.target.value }))}
                 />
               </label>
-
               <label className="field">
                 <span className="fieldLabel">Account number</span>
                 <input
@@ -490,7 +450,6 @@ export default function App() {
                 />
                 {formErrors.account ? <div className="errorText">{formErrors.account}</div> : null}
               </label>
-
               <label className="field">
                 <span className="fieldLabel">IFSC code</span>
                 <input
@@ -500,7 +459,6 @@ export default function App() {
                 />
                 {formErrors.ifsc ? <div className="errorText">{formErrors.ifsc}</div> : null}
               </label>
-
               <label className="field">
                 <span className="fieldLabel">Reference (optional)</span>
                 <input
@@ -509,11 +467,9 @@ export default function App() {
                   onChange={(e) => setTxDraft((d) => ({ ...d, reference: e.target.value }))}
                 />
               </label>
-
               <div className="summaryLine">
                 <span>Account</span><span>{txDraft.recipientAccountNumber ? `········${txDraft.recipientAccountNumber.slice(-4)}` : '—'}</span>
               </div>
-
               <button
                 className="btnPrimary"
                 onClick={() => {
@@ -522,18 +478,15 @@ export default function App() {
               >
                 Review transfer <ArrowIcon />
               </button>
-
               <button className="btnGhost" onClick={() => setScreen({ name: 'recoveryForm' })}>
                 Recover account instead
               </button>
             </section>
           ) : null}
-
           {screen.name === 'transactionConfirm' ? (
             <section className="screen fadeIn">
               <div className="screenEyebrow">Confirm</div>
               <h1 className="screenTitle">Review &amp; send</h1>
-
               <div className="receiptCard">
                 <div className="receiptAmount">{formatAmountINR(txDraft.amount)}</div>
                 <div className="receiptTo">to {txDraft.recipientName}</div>
@@ -542,41 +495,26 @@ export default function App() {
                 <div className="receiptRow"><span>Account</span><span>········5678</span></div>
                 <div className="receiptRow"><span>Reference</span><span className="mono">{txDraft.transactionId}</span></div>
               </div>
-
               {passkeyStatus ? (
                 <div className={passkeyStatus.type === 'success' ? 'okCard' : 'warnCard'}>
                   {passkeyStatus.message}
                 </div>
               ) : null}
-
-              <div className="protectedNotice">
-                <ShieldIcon size={16} />
-                <div>
-                  <div className="protectedTitle">Visual Password required</div>
-                  <div className="protectedText">Verify with your personal challenge to authorize this payment.</div>
-                </div>
-              </div>
-
-              <button className="btnPrimary" onClick={startTransaction} disabled={verifyPending}>
-                {verifyPending ? 'Preparing challenge…' : 'Continue to verification'}
+              <button className="btnPrimary" onClick={authorizeTransaction} disabled={verifyPending}>
+                {verifyPending ? 'Processing…' : 'Confirm & send'}
               </button>
-
               {expiredMsg ? <div className="warnCard">{expiredMsg}</div> : null}
-
               <button className="btnGhost" onClick={() => setScreen({ name: 'transactionForm' })}>
                 Back
               </button>
             </section>
           ) : null}
-
-          {screen.name === 'challenge' || screen.name === 'recoveryChallenge' ? (
+          {screen.name === 'recoveryChallenge' ? (
             <section className="screen fadeIn">
               <div className="screenEyebrow">Verify</div>
               <h1 className="screenTitle">Visual Password</h1>
               <p className="screenMuted">Find your word, then complete your register row.</p>
-
               <ChallengeGrid masks={maskOnlyGrid(challenge?.challengeGrid)} />
-
               <RegisterLetters
                 letters={challenge?.registerLetters || []}
                 values={otpValues}
@@ -587,7 +525,6 @@ export default function App() {
                 }}
                 error={!!verifyError}
               />
-
               <button
                 className={`btnPrimary ${verifyPending ? 'btnDisabled' : ''}`}
                 onClick={verifyTransaction}
@@ -599,13 +536,10 @@ export default function App() {
                   'Authorize payment'
                 )}
               </button>
-
               {verifyError ? <div className="errorInline">{verifyError}</div> : null}
-
               <div className="finePrint">This step confirms it's really you — never share these values.</div>
             </section>
           ) : null}
-
           {screen.name === 'processing' ? (
                 <section className="screen fadeIn">
                   <div className="successWrap">
@@ -615,7 +549,6 @@ export default function App() {
                   </div>
                 </section>
               ) : null}
-
           {screen.name === 'success' ? (
             <section className="screen fadeIn">
               <div className="successWrap">
@@ -623,14 +556,12 @@ export default function App() {
                 <div className="successTitle">Payment sent</div>
                 <div className="successSub">{formatAmountINR(Number(successData?.amount || txDraft.amount))} to {txDraft.recipientName}</div>
               </div>
-
               <div className="receiptCard">
                 <div className="receiptRow"><span>Recipient</span><span>{txDraft.recipientName}</span></div>
                 <div className="receiptRow"><span>Amount</span><span>{formatAmountINR(Number(successData?.amount || txDraft.amount))}</span></div>
                 <div className="receiptRow"><span>Reference</span><span className="mono">{successData?.transactionId || txDraft.transactionId}</span></div>
                 <div className="receiptRow"><span>Payout ID</span><span className="mono">{successData?.payoutId || '—'}</span></div>
               </div>
-
               <button
                 className="btnGhost"
                 onClick={registerPasskey}
@@ -645,7 +576,6 @@ export default function App() {
               </button>
             </section>
           ) : null}
-
           {screen.name === 'expired' ? (
             <section className="screen fadeIn">
               <div className="warnIcon">!</div>
@@ -659,13 +589,11 @@ export default function App() {
               </button>
             </section>
           ) : null}
-
           {screen.name === 'recoveryForm' ? (
             <section className="screen fadeIn">
               <div className="screenEyebrow">Recovery</div>
               <h1 className="screenTitle">Recover your account</h1>
               <p className="screenMuted">Use your passkey for instant recovery, or verify by email.</p>
-
               <label className="field">
                 <span className="fieldLabel">Email</span>
                 <input
@@ -675,23 +603,18 @@ export default function App() {
                   onChange={(e) => setTxDraft((d) => ({ ...d, email: e.target.value }))}
                 />
               </label>
-
               <button className="btnPrimary" onClick={recoverWithPasskey} disabled={passkeyBusy}>
                 {passkeyBusy ? 'Verifying passkey…' : '🔑 Recover with Passkey'}
               </button>
-
               {passkeyStatus ? (
                 <div className={passkeyStatus.type === 'success' ? 'okCard' : 'warnCard'}>
                   {passkeyStatus.message}
                 </div>
               ) : null}
-
               <div className="dividerRow"><span>or</span></div>
-
               <button className="btnGhost" onClick={() => startRecovery(txDraft.email)} style={{ border: '1px solid var(--line)' }}>
                 Send email verification instead
               </button>
-
               <button className="btnGhost" onClick={() => setScreen({ name: 'transactionForm' })}>
                 Back
               </button>
@@ -702,12 +625,10 @@ export default function App() {
     </div>
   );
 }
-
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 button,input{font-family:inherit;}
-
 :root{
   --navy:#0B1E3D;
   --navy-2:#122A52;
@@ -719,9 +640,7 @@ button,input{font-family:inherit;}
   --good:#1B7A4A;
   --danger:#B3413A;
 }
-
 .appRoot{min-height:100vh;background:var(--paper);color:var(--ink);font-family:'Inter',sans-serif;display:flex;flex-direction:column;}
-
 .topHeader{display:flex;align-items:center;justify-content:space-between;padding:18px 28px;background:var(--navy);color:#fff;}
 .brand{display:flex;align-items:center;gap:12px;}
 .shieldWrap{width:36px;height:36px;border-radius:10px;background:rgba(201,162,75,0.16);border:1px solid rgba(201,162,75,0.35);color:var(--gold);display:flex;align-items:center;justify-content:center;}
@@ -732,30 +651,23 @@ button,input{font-family:inherit;}
 .okCard{padding:12px 14px;border-radius:11px;background:rgba(27,122,74,0.08);border:1px solid rgba(27,122,74,0.22);color:var(--good);font-size:0.83rem;line-height:1.5;}
 .dividerRow{display:flex;align-items:center;gap:10px;color:var(--mute);font-size:0.78rem;margin:2px 0;}
 .dividerRow::before,.dividerRow::after{content:'';flex:1;height:1px;background:var(--line);}
-
 .stage{flex:1;display:flex;align-items:center;justify-content:center;padding:40px 20px;}
-
 .phoneFrame{position:relative;width:392px;max-width:100%;background:#fff;border-radius:28px;border:1px solid var(--line);box-shadow:0 20px 60px rgba(11,30,61,0.12),0 2px 8px rgba(11,30,61,0.06);padding:34px 26px 28px;min-height:600px;display:flex;flex-direction:column;}
 .phoneNotch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:60px;height:5px;border-radius:99px;background:var(--line);}
-
 .screen{display:flex;flex-direction:column;gap:14px;flex:1;padding-top:10px;}
 .fadeIn{animation:fadeUp 0.32s ease both;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
-
 .screenEyebrow{font-size:0.7rem;font-weight:600;color:var(--gold);letter-spacing:0.12em;text-transform:uppercase;}
 .screenTitle{font-family:'Fraunces',serif;font-weight:600;font-size:1.55rem;color:var(--navy);letter-spacing:-0.01em;margin-top:-4px;}
 .screenMuted{font-size:0.85rem;color:var(--mute);line-height:1.55;margin-top:-6px;}
-
 .amountField{display:flex;align-items:baseline;gap:6px;padding:18px 18px;border:1.5px solid var(--line);border-radius:14px;background:var(--paper);margin-top:4px;}
 .amountCurrency{font-family:'Fraunces',serif;font-size:1.6rem;color:var(--navy);font-weight:600;}
 .amountInput{border:none;background:transparent;outline:none;font-family:'Fraunces',serif;font-size:2rem;font-weight:600;color:var(--navy);width:100%;}
 .amountInput::-webkit-outer-spin-button,.amountInput::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
-
 .field{display:flex;flex-direction:column;gap:6px;}
 .fieldLabel{font-size:0.72rem;font-weight:600;color:var(--mute);letter-spacing:0.04em;text-transform:uppercase;}
 .fieldInput{padding:12px 14px;border-radius:11px;border:1.5px solid var(--line);background:#fff;font-size:0.92rem;color:var(--ink);outline:none;transition:border-color .15s,box-shadow .15s;}
 .fieldInput:focus{border-color:var(--navy);box-shadow:0 0 0 3px rgba(11,30,61,0.08);}
-
 .summaryCard,.receiptCard{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:9px;}
 .summaryLine,.receiptRow{display:flex;justify-content:space-between;font-size:0.85rem;color:var(--mute);}
 .summaryLine span:last-child,.receiptRow span:last-child{color:var(--ink);font-weight:500;}
@@ -763,28 +675,22 @@ button,input{font-family:inherit;}
 .summaryLine.total span:last-child{font-family:'Fraunces',serif;font-size:1.1rem;color:var(--navy);}
 .summaryDivider,.receiptDivider{height:1px;background:var(--line);margin:2px 0;}
 .mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:0.78rem;}
-
 .receiptAmount{font-family:'Fraunces',serif;font-weight:600;font-size:2rem;color:var(--navy);text-align:center;}
 .receiptTo{text-align:center;font-size:0.86rem;color:var(--mute);margin-top:-4px;}
-
 .protectedNotice{display:flex;gap:10px;align-items:flex-start;padding:13px 15px;border-radius:12px;background:rgba(11,30,61,0.05);border:1px solid rgba(11,30,61,0.12);color:var(--navy);}
 .protectedTitle{font-size:0.84rem;font-weight:700;}
 .protectedText{font-size:0.78rem;color:var(--mute);line-height:1.5;margin-top:2px;}
-
 .btnPrimary{width:100%;padding:14px;border-radius:12px;border:none;background:var(--navy);color:#fff;font-weight:600;font-size:0.92rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .15s,box-shadow .15s,opacity .15s;box-shadow:0 8px 20px rgba(11,30,61,0.18);}
 .btnPrimary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 10px 26px rgba(11,30,61,0.26);}
 .btnPrimary:disabled{opacity:0.5;cursor:not-allowed;transform:none;}
 .btnGhost{width:100%;padding:11px;border-radius:12px;border:none;background:transparent;color:var(--mute);font-size:0.86rem;font-weight:500;cursor:pointer;transition:color .15s;}
 .btnGhost:hover{color:var(--navy);}
-
 .warnCard{padding:12px 14px;border-radius:11px;background:rgba(179,65,58,0.08);border:1px solid rgba(179,65,58,0.22);color:var(--danger);font-size:0.83rem;line-height:1.5;}
 .warnIcon{width:48px;height:48px;border-radius:50%;background:rgba(179,65,58,0.1);border:1.5px solid rgba(179,65,58,0.28);color:var(--danger);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:700;font-size:1.3rem;margin-bottom:2px;}
-
 .challengeGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .challengeCard{border:1.5px solid var(--line);border-radius:11px;padding:12px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;background:#fff;animation:fadeUp 0.3s ease both;}
 .challengeMask{font-family:'Fraunces',serif;font-weight:600;font-size:0.98rem;color:var(--navy);letter-spacing:0.02em;}
 .challengeValue{font-size:1.15rem;font-weight:700;color:var(--gold);}
-
 .registerBlock{display:flex;flex-direction:column;gap:8px;}
 .registerLabels{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
 .registerLabel{text-align:center;font-size:0.78rem;font-weight:700;color:var(--navy);background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:6px 0;}
@@ -795,21 +701,16 @@ button,input{font-family:inherit;}
 .shake{animation:shakeX 0.35s ease;}
 @keyframes shakeX{0%,100%{transform:translateX(0);}25%{transform:translateX(-5px);}75%{transform:translateX(5px);}}
 .errorText{font-size:0.78rem;color:var(--danger);}
-
 .errorInline{padding:10px 13px;border-radius:10px;background:rgba(179,65,58,0.08);border:1px solid rgba(179,65,58,0.2);color:var(--danger);font-size:0.82rem;}
 .finePrint{font-size:0.74rem;color:var(--mute);text-align:center;line-height:1.5;}
-
 .spinnerWrap{display:flex;align-items:center;gap:8px;}
 .spinner{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,0.35);border-top-color:#fff;animation:spin 0.7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
-
 .successWrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0 6px;text-align:center;}
 .successCheck{width:60px;height:60px;border-radius:50%;background:rgba(27,122,74,0.1);border:2px solid rgba(27,122,74,0.3);color:var(--good);display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:700;}
 .successTitle{font-family:'Fraunces',serif;font-weight:600;font-size:1.3rem;color:var(--navy);}
 .successSub{font-size:0.85rem;color:var(--mute);}
-
 .tokenDetails{margin-top:4px;font-size:0.78rem;color:var(--mute);cursor:pointer;}
 .tokenValue{margin-top:6px;word-break:break-all;font-size:0.72rem;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;}
-
 @media(max-width:420px){.phoneFrame{padding:30px 18px 22px;}}
 `;
