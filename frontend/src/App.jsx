@@ -130,6 +130,9 @@ export default function App() {
     transactionId: '',
     amount: 500000,
     recipientName: 'Rahul Sharma',
+    recipientAccountNumber: '',   // NEW
+    recipientIfsc: '',            // NEW
+    reference: '',                // NEW (optional)
   });
 
   const [otpValues, setOtpValues] = useState(['', '', '', '', '']);
@@ -154,8 +157,22 @@ export default function App() {
 
   async function startTransaction() {
     resetChallengeState();
-    setApiState({ lastCallLabel: 'POST /api/transactions/challenge', lastCallAt: Date.now() });
+    setApiState({ lastCallLabel: 'POST /api/payments/create', lastCallAt: Date.now() });
+
     try {
+      // STEP 1: create pending payment before any verification
+      await apiPost('/api/payments/create', {
+        transactionId: txDraft.transactionId,
+        recipient: {
+          name: txDraft.recipientName,
+          accountNumber: txDraft.recipientAccountNumber,
+          ifsc: txDraft.recipientIfsc,
+        },
+        amount: txDraft.amount,
+        reference: txDraft.reference,
+      });
+
+      // STEP 2: launch Scam2Safe challenge (unchanged)
       const result = await apiPost('/api/transactions/challenge', {
         email: txDraft.email,
         transactionId: txDraft.transactionId,
@@ -164,7 +181,7 @@ export default function App() {
       setScreen({ name: 'challenge', mode: 'transaction' });
       setApiState((s) => ({ ...s, lastCallResponse: result }));
     } catch (e) {
-      const msg = e?.message || 'Challenge failed.';
+      const msg = e?.message || 'Unable to start payment.';
       setExpiredMsg(msg);
       setScreen({ name: 'expired', mode: 'transaction' });
       setApiState((s) => ({ ...s, lastCallError: msg }));
@@ -176,7 +193,6 @@ export default function App() {
     setVerifyPending(true);
     setVerifyError(null);
     setInputShake(false);
-    setApiState({ lastCallLabel: 'POST /api/transactions/verify', lastCallAt: Date.now() });
 
     const registerInputs = otpValues.map((v) => Number(v));
     if (registerInputs.some((n) => !Number.isFinite(n))) {
@@ -186,11 +202,18 @@ export default function App() {
       return;
     }
 
+    setApiState({ lastCallLabel: 'POST /api/payments/confirm', lastCallAt: Date.now() });
+
     try {
-      const result = await apiPost('/api/transactions/verify', {
+      // show processing screen while the backend verifies + calls Razorpay
+      setScreen({ name: 'processing' });
+
+      const result = await apiPost('/api/payments/confirm', {
+        transactionId: txDraft.transactionId,
         sessionId: challenge.sessionId,
         registerInputs,
       });
+
       setApiState((s) => ({ ...s, lastCallResponse: result }));
       setSuccessData(result);
       setScreen({ name: 'success' });
@@ -198,11 +221,14 @@ export default function App() {
     } catch (e) {
       const msg = e?.message || String(e);
       setApiState((s) => ({ ...s, lastCallError: msg }));
+
       const isExpired = /expired|session|time/i.test(msg);
       if (isExpired) {
         setExpiredMsg(msg);
         setScreen({ name: 'expired', mode: 'transaction' });
       } else {
+        // go back to challenge screen to show the error rather than staying on processing
+        setScreen({ name: 'challenge', mode: 'transaction' });
         setInputShake(true);
         setVerifyError(msg);
       }
@@ -273,17 +299,35 @@ export default function App() {
                 />
               </label>
 
-              <div className="summaryCard">
-                <div className="summaryLine">
-                  <span>Bank</span><span>ICICI Bank</span>
-                </div>
-                <div className="summaryLine">
-                  <span>Account</span><span>········5678</span>
-                </div>
-                <div className="summaryDivider" />
-                <div className="summaryLine total">
-                  <span>Total</span><span>{formatAmountINR(txDraft.amount)}</span>
-                </div>
+              <label className="field">
+                <span className="fieldLabel">Account number</span>
+                <input
+                  className="fieldInput"
+                  value={txDraft.recipientAccountNumber}
+                  onChange={(e) => setTxDraft((d) => ({ ...d, recipientAccountNumber: e.target.value }))}
+                />
+              </label>
+
+              <label className="field">
+                <span className="fieldLabel">IFSC code</span>
+                <input
+                  className="fieldInput"
+                  value={txDraft.recipientIfsc}
+                  onChange={(e) => setTxDraft((d) => ({ ...d, recipientIfsc: e.target.value.toUpperCase() }))}
+                />
+              </label>
+
+              <label className="field">
+                <span className="fieldLabel">Reference (optional)</span>
+                <input
+                  className="fieldInput"
+                  value={txDraft.reference}
+                  onChange={(e) => setTxDraft((d) => ({ ...d, reference: e.target.value }))}
+                />
+              </label>
+
+              <div className="summaryLine">
+                <span>Account</span><span>{txDraft.recipientAccountNumber ? `········${txDraft.recipientAccountNumber.slice(-4)}` : '—'}</span>
               </div>
 
               <button className="btnPrimary" onClick={() => setScreen({ name: 'transactionConfirm' })}>
@@ -375,14 +419,21 @@ export default function App() {
                 <div className="successSub">{formatAmountINR(Number(successData?.amount || txDraft.amount))} to {txDraft.recipientName}</div>
               </div>
 
+              {screen.name === 'processing' ? (
+                <section className="screen fadeIn">
+                  <div className="successWrap">
+                    <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3, borderColor: 'rgba(11,30,61,0.15)', borderTopColor: 'var(--navy)' }} />
+                    <div className="successTitle" style={{ marginTop: 12 }}>Processing payment</div>
+                    <div className="successSub">Verifying and transferring funds — this takes a few seconds.</div>
+                  </div>
+                </section>
+              ) : null}
+
               <div className="receiptCard">
                 <div className="receiptRow"><span>Recipient</span><span>{txDraft.recipientName}</span></div>
                 <div className="receiptRow"><span>Amount</span><span>{formatAmountINR(Number(successData?.amount || txDraft.amount))}</span></div>
                 <div className="receiptRow"><span>Reference</span><span className="mono">{successData?.transactionId || txDraft.transactionId}</span></div>
-                <details className="tokenDetails">
-                  <summary>Verification token</summary>
-                  <div className="tokenValue mono">{successData?.verificationToken || challenge?.verificationToken || '—'}</div>
-                </details>
+                <div className="receiptRow"><span>Payout ID</span><span className="mono">{successData?.payoutId || '—'}</span></div>
               </div>
 
               <button className="btnPrimary" onClick={() => setScreen({ name: 'transactionForm' })}>

@@ -1,0 +1,55 @@
+name: Deploy BankGuard Frontend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend-deploy.yml"
+
+workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy frontend to VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "===== BANKGUARD FRONTEND DEPLOY ====="
+
+            cd /root/bankguard/frontend
+
+            echo "Pull latest code..."
+            git pull origin main
+
+            echo "Install dependencies..."
+            npm ci
+
+            echo "Build production..."
+            npm run build
+
+            echo "Backup previous deployment..."
+            mkdir -p /var/www/backups
+
+            rm -rf /var/www/backups/bankguard-prev
+            if [ -d /var/www/bankguard ]; then
+              cp -r /var/www/bankguard /var/www/backups/bankguard-prev
+            fi
+
+            echo "Deploy frontend..."
+            rm -rf /var/www/bankguard/*
+            cp -r dist/* /var/www/bankguard/
+
+            echo "Reload nginx..."
+            sudo systemctl reload nginx
+
+            echo "✓ Deployment complete"

@@ -10,9 +10,9 @@ export const config = {
 
   MONGO_URI: process.env.MONGO_URI || "mongodb://localhost:27017/bankguard",
 
-  YAPILY_APPLICATION_ID:     process.env.YAPILY_APPLICATION_ID || "",
-  YAPILY_APPLICATION_SECRET: process.env.YAPILY_APPLICATION_SECRET || "",
-  YAPILY_BASE_URL:           process.env.YAPILY_BASE_URL || "https://api.yapily.com",
-  YAPILY_CALLBACK_URL:       process.env.YAPILY_CALLBACK_URL || "",
-  YAPILY_INSTITUTION_ID:     process.env.YAPILY_INSTITUTION_ID || "modelo-sandbox",
+  RAZORPAY_KEY_ID:          process.env.RAZORPAY_KEY_ID || "",
+  RAZORPAY_KEY_SECRET:      process.env.RAZORPAY_KEY_SECRET || "",
+  RAZORPAY_BASE_URL:        process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com/v1",
+  RAZORPAY_ACCOUNT_NUMBER:  process.env.RAZORPAY_ACCOUNT_NUMBER || "",
+  
 };

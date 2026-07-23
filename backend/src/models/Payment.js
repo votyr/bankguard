@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const paymentSchema = new mongoose.Schema(
   {
     transactionId: { type: String, required: true, unique: true },
-    recipient: { type: Object, required: true },
+    recipient: { type: Object, required: true }, // { name, accountNumber, ifsc, email?, phone? }
     amount: { type: Number, required: true },
     reference: { type: String },
     status: {
@@ -11,8 +11,8 @@ const paymentSchema = new mongoose.Schema(
       enum: ["PENDING", "VERIFYING", "PROCESSING", "SUCCESS", "FAILED", "VERIFICATION_FAILED"],
       default: "PENDING",
     },
-    yapilyPaymentId: { type: String },
-    yapilyStatus: { type: String },
+    razorpayPayoutId: { type: String },
+    razorpayStatus: { type: String },
   },
   { timestamps: true }
 );
