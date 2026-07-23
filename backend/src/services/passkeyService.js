@@ -96,7 +96,12 @@ export async function verifyAuthentication(email, response) {
     throw err;
   }
 
-  const credential = await PasskeyCredential.findOne({ credentialId: response.id });
+  console.log("AUTH RESPONSE ID:", response.id);
+  console.log("ALL STORED:", await PasskeyCredential.find({}));
+
+  const credential = await PasskeyCredential.findOne({
+    credentialId: response.id
+  });
   if (!credential) {
     const err = new Error("Unknown passkey credential");
     err.status = 404;
