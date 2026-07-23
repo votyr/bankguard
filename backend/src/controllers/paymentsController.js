@@ -11,6 +11,9 @@ export async function createPayment(body, req) {
 }
 
 export async function confirmPayment(body, req) {
+  console.log("========== CONFIRM PAYMENT ==========");
+  console.log(JSON.stringify(body, null, 2));
+
   const email = getAuthedEmail(req);
   return confirmPaymentService({ ...body, ownerEmail: email });
 }
