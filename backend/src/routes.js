@@ -13,6 +13,7 @@ function send(res, status, body) {
 
 // Returns true if it handled the request, false if not an API match
 export async function handleApiRequest(req, res) {
+  console.log(req.method, req.url);
   const url = req.url;
   
   if (req.method === "POST" && url === "/api/auth/register") {
