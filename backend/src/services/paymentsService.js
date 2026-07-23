@@ -1,6 +1,5 @@
 import Payment from "../models/Payment.js";
 import { initiateRazorpayPayout } from "./razorpayService.js";
-import { verifyTransactionChallenge } from "./VisualPasswordService.js";
 
 export async function createPayment({ transactionId, recipient, amount, reference }) {
   if (!transactionId || !recipient || !amount) {
@@ -12,27 +11,11 @@ export async function createPayment({ transactionId, recipient, amount, referenc
   return { status: payment.status, transactionId: payment.transactionId };
 }
 
-export async function confirmPayment({ transactionId, sessionId, registerInputs }) {
+export async function confirmPayment({ transactionId }) {
   const payment = await Payment.findOne({ transactionId });
   if (!payment) {
     const err = new Error("Payment not found or expired");
     err.status = 404;
-    throw err;
-  }
-
-  const verification = await verifyTransactionChallenge({ sessionId, registerInputs });
-
-  if (!verification.success) {
-    payment.status = "VERIFICATION_FAILED";
-    await payment.save();
-    const err = new Error("Verification failed or expired. Please try again.");
-    err.status = 401;
-    throw err;
-  }
-
-  if (verification.transactionId && verification.transactionId !== transactionId) {
-    const err = new Error("Transaction mismatch during verification.");
-    err.status = 400;
     throw err;
   }
 
