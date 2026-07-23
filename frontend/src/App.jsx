@@ -506,37 +506,7 @@ export default function App() {
               </button>
             </section>
           ) : null}
-          {screen.name === 'challenge' || screen.name === 'recoveryChallenge' ? (
-            <section className="screen fadeIn">
-              <div className="screenEyebrow">Verify</div>
-              <h1 className="screenTitle">Enter your code</h1>
-              <p className="screenMuted">Find your number, then complete your register row.</p>
-              <ChallengeGrid masks={maskOnlyGrid(challenge?.challengeGrid)} />
-              <RegisterLetters
-                letters={challenge?.registerLetters || []}
-                values={otpValues}
-                onChange={(next) => {
-                  setOtpValues(next);
-                  if (inputShake) setInputShake(false);
-                  setVerifyError(null);
-                }}
-                error={!!verifyError}
-              />
-              <button
-                className={`btnPrimary ${verifyPending ? 'btnDisabled' : ''}`}
-                onClick={verifyTransaction}
-                disabled={verifyPending}
-              >
-                {verifyPending ? (
-                  <span className="spinnerWrap"><span className="spinner" />Verifying…</span>
-                ) : (
-                  'Authorize payment'
-                )}
-              </button>
-              {verifyError ? <div className="errorInline">{verifyError}</div> : null}
-              <div className="finePrint">This step confirms it's really you — never share these values.</div>
-            </section>
-          ) : null}
+
           {screen.name === 'processing' ? (
             <section className="screen fadeIn">
               <div className="successWrap">
