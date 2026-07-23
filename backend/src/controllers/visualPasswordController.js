@@ -3,6 +3,7 @@ import {
   verifyTransactionChallenge,
   triggerRecoveryEmail,
 } from "../services/VisualPasswordService.js";
+import { getAuthedEmail } from "../services/requireAuth.js";
 
 function readBody(req) {
   return new Promise((resolve, reject) => {

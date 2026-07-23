@@ -15,4 +15,7 @@ export const config = {
   RAZORPAY_BASE_URL:        process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com/v1",
   RAZORPAY_ACCOUNT_NUMBER:  process.env.RAZORPAY_ACCOUNT_NUMBER || "",
   
+  RP_NAME: process.env.RP_NAME || "BankGuard",
+  RP_ID: process.env.RP_ID || "localhost",           // domain, e.g. "bankguard.scam2safe.com" in prod
+  RP_ORIGIN: process.env.RP_ORIGIN || "http://localhost:5173",
 };

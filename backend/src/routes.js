@@ -1,5 +1,7 @@
 import visualPasswordController from "./controllers/visualPasswordController.js";
 import * as paymentsController from "./controllers/paymentsController.js";
+import * as passkeyController from "./controllers/passkeyController.js";
+import * as authController from "./controllers/authController.js";
 
 function send(res, status, body) {
   res.writeHead(status, {
@@ -12,11 +14,25 @@ function send(res, status, body) {
 // Returns true if it handled the request, false if not an API match
 export async function handleApiRequest(req, res) {
   const url = req.url;
+  
+  if (req.method === "POST" && url === "/api/auth/register") {
+    await runController(req, res, authController.register);
+    return true;
+  }
+  if (req.method === "POST" && url === "/api/auth/login") {
+    await runController(req, res, authController.login);
+    return true;
+  }
 
   // --- existing Scam2Safe routes (untouched) ---
-  if (req.method === "POST" && url.startsWith("/api/") && !url.startsWith("/api/payments")) {
-    await visualPasswordController.handle(req, res);
-    return true;
+  if (
+    req.method === "POST" &&
+    url.startsWith("/api/") &&
+    !url.startsWith("/api/payments") &&
+    !url.startsWith("/api/passkey")
+  ) {
+      await visualPasswordController.handle(req, res);
+      return true;
   }
 
   // --- new payments routes ---
@@ -41,16 +57,33 @@ export async function handleApiRequest(req, res) {
     return true;
   }
 
+  // inside handleApiRequest, add:
+  if (req.method === "POST" && url === "/api/passkey/register-options") {
+    await runController(req, res, passkeyController.registerOptions);
+    return true;
+  }
+  if (req.method === "POST" && url === "/api/passkey/register-verify") {
+    await runController(req, res, passkeyController.registerVerify);
+    return true;
+  }
+  if (req.method === "POST" && url === "/api/passkey/auth-options") {
+    await runController(req, res, passkeyController.authOptions);
+    return true;
+  }
+  if (req.method === "POST" && url === "/api/passkey/auth-verify") {
+    await runController(req, res, passkeyController.authVerify);
+    return true;
+  }
+
   return false; // not an API route
 }
 
 async function runController(req, res, handlerFn) {
   try {
     const body = await readBody(req);
-    const result = await handlerFn(body);
+    const result = await handlerFn(body, req);   // pass req through
     send(res, 200, result);
   } catch (err) {
-    // Log full detail so we can actually see what broke
     console.error("Payment error:", err.response?.data || err.message, err.stack);
     send(res, err.status || 500, { error: err.message || "Internal server error" });
   }
