@@ -27,20 +27,37 @@ sdk.interceptors.response.use(
 
 // --- Transaction verification (now number-box based) ---
 export async function startTransactionChallenge({ email, transactionId }) {
-    const { data } = await sdk.post("/api/sdk/numbers/start", {
+    const { data } = await sdk.post(
+        "/api/sdk/numbers/transaction/start",
+        {
         email,
         transactionId,
-    });
-    if (!data.success) throw new Error(data.error || "SDK failed to start challenge");
+        }
+    );
+
+    if (!data.success) {
+        throw new Error(data.error || "SDK failed to start challenge");
+    }
+
     return data;
 }
 
-export async function verifyTransactionChallenge({ sessionId, registerInputs }) {
-    const { data } = await sdk.post("/api/sdk/numbers/verify", {
+export async function verifyTransactionChallenge({
+    sessionId,
+    registerInputs,
+    }) {
+    const { data } = await sdk.post(
+        "/api/sdk/numbers/transaction/verify",
+        {
         sessionId,
         registerInputs,
-    });
-    if (!data.success) throw new Error(data.error || "Verification failed");
+        }
+    );
+
+    if (!data.success) {
+        throw new Error(data.error || "Verification failed");
+    }
+
     return data;
 }
 
