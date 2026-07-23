@@ -96,9 +96,6 @@ export async function verifyAuthentication(email, response) {
     throw err;
   }
 
-  console.log("AUTH RESPONSE ID:", response.id);
-  console.log("ALL STORED:", await PasskeyCredential.find({}));
-
   const credential = await PasskeyCredential.findOne({
     credentialId: response.id
   });
@@ -113,10 +110,11 @@ export async function verifyAuthentication(email, response) {
     expectedChallenge,
     expectedOrigin: config.RP_ORIGIN,
     expectedRPID: config.RP_ID,
-    authenticator: {
-      credentialID: Buffer.from(credential.credentialId, "base64url"),
-      credentialPublicKey: Buffer.from(credential.publicKey, "base64url"),
+    credential: {
+      id: credential.credentialId,
+      publicKey: new Uint8Array(Buffer.from(credential.publicKey, "base64url")),
       counter: credential.counter,
+      transports: credential.transports,
     },
   });
 
