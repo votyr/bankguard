@@ -25,40 +25,41 @@ sdk.interceptors.response.use(
     }
 );
 
+// --- Transaction verification (now number-box based) ---
 export async function startTransactionChallenge({ email, transactionId }) {
-    const { data } = await sdk.post("/api/sdk/transaction/start", {
+    const { data } = await sdk.post("/api/sdk/numbers/start", {
         email,
         transactionId,
     });
-
-    if (!data.success)
-        throw new Error(data.error || "SDK failed to start challenge");
-
+    if (!data.success) throw new Error(data.error || "SDK failed to start challenge");
     return data;
 }
 
-export async function verifyTransactionChallenge({
-    sessionId,
-    registerInputs,
-}) {
-    const { data } = await sdk.post("/api/sdk/transaction/verify", {
+export async function verifyTransactionChallenge({ sessionId, registerInputs }) {
+    const { data } = await sdk.post("/api/sdk/numbers/verify", {
         sessionId,
         registerInputs,
     });
-
-    if (!data.success)
-        throw new Error(data.error || "Verification failed");
-
+    if (!data.success) throw new Error(data.error || "Verification failed");
     return data;
 }
 
+// --- Recovery (unchanged, still word-based unless you also migrated this) ---
 export async function triggerRecoveryEmail({ email }) {
-    const { data } = await sdk.post("/api/sdk/recovery/start", {
-        email,
-    });
+    const { data } = await sdk.post("/api/sdk/recovery/start", { email });
+    if (!data.success) throw new Error(data.error || "Recovery failed");
+    return data;
+}
 
-    if (!data.success)
-        throw new Error(data.error || "Recovery failed");
+// --- NEW: Login via number-box challenge ---
+export async function startLoginChallenge({ email }) {
+    const { data } = await sdk.post("/api/numbers/login", { email });
+    if (!data.success) throw new Error(data.error || "Unable to start login");
+    return data;
+}
 
+export async function verifyLoginChallenge({ sessionId, registerInputs }) {
+    const { data } = await sdk.post("/api/numbers/verify", { sessionId, registerInputs });
+    if (!data.success) throw new Error(data.error || "Login verification failed");
     return data;
 }

@@ -2,6 +2,8 @@ import {
   startTransactionChallenge,
   verifyTransactionChallenge,
   triggerRecoveryEmail,
+  startLoginChallenge,
+  verifyLoginChallenge,
 } from "../services/VisualPasswordService.js";
 import { getAuthedEmail } from "../services/requireAuth.js";
 
@@ -39,6 +41,8 @@ const routes = {
   "/api/transactions/challenge": startTransactionChallenge,
   "/api/transactions/verify": verifyTransactionChallenge,
   "/api/recovery/start": triggerRecoveryEmail,
+  "/api/auth/login-start": startLoginChallenge,
+  "/api/auth/login-verify": verifyLoginChallenge,
 };
 
 export default {

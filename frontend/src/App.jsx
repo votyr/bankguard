@@ -1,11 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 
 const baseApiUrl = import.meta.env.VITE_API_BASE_URL;
 
-async function apiPost(path, body) {
+async function apiPost(path, body, token) {
   const response = await fetch(`${baseApiUrl}${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(body),
   });
   const data = await response.json();
@@ -125,10 +129,18 @@ function ChallengeGrid({ masks }) {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState({ name: 'transactionForm' });
+  const [screen, setScreen] = useState({ name: 'login' }); // was 'transactionForm'
   const [apiState, setApiState] = useState({});
   const [challenge, setChallenge] = useState(null);
   const [formErrors, setFormErrors] = useState({});
+  const [passkeyStatus, setPasskeyStatus] = useState(null); // { type: 'success'|'error', message }
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
+  const [session, setSession] = useState({ token: null, email: null }); // logged-in user
+  const [loginChallenge, setLoginChallenge] = useState(null);
+  const [loginOtp, setLoginOtp] = useState(['', '', '', '', '']);
+  const [loginPending, setLoginPending] = useState(false);
+  const [loginError, setLoginError] = useState(null);
+  const [loginEmail, setLoginEmail] = useState('');
 
   function validateBankDetails() {
     const errors = {};
@@ -182,14 +194,54 @@ export default function App() {
     setTxDraft((d) => ({ ...d, transactionId: `BANK-${Date.now()}` }));
   }, []);
 
+  async function startLogin() {
+    setLoginError(null);
+    setLoginPending(true);
+    try {
+      const result = await apiPost('/api/auth/login-start', { email: loginEmail }, session.token);
+      setLoginChallenge(result);
+      setLoginOtp(['', '', '', '', '']);
+      setScreen({ name: 'loginChallenge' });
+    } catch (e) {
+      setLoginError(e?.message || 'Unable to start login.');
+    } finally {
+      setLoginPending(false);
+    }
+  }
+
+  async function verifyLogin() {
+    setLoginPending(true);
+    setLoginError(null);
+    const registerInputs = loginOtp.map((v) => Number(v));
+    if (registerInputs.some((n) => !Number.isFinite(n))) {
+      setLoginError('Enter all five register values.');
+      setLoginPending(false);
+      return;
+    }
+    try {
+      const result = await apiPost('/api/auth/login-verify', {
+        sessionId: loginChallenge.sessionId,
+        registerInputs,
+      },session.token);
+      setSession({ token: result.token, email: result.user?.email || loginEmail });
+      setTxDraft((d) => ({ ...d, email: result.user?.email || loginEmail }));
+      setScreen({ name: 'transactionForm' });
+    } catch (e) {
+      setLoginError(e?.message || 'Login verification failed.');
+    } finally {
+      setLoginPending(false);
+    }
+  }
+
   async function startTransaction() {
+    const freshTransactionId = `BANK-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    setTxDraft((d) => ({ ...d, transactionId: freshTransactionId }));
     resetChallengeState();
     setApiState({ lastCallLabel: 'POST /api/payments/create', lastCallAt: Date.now() });
 
     try {
-      // STEP 1: create pending payment before any verification
       await apiPost('/api/payments/create', {
-        transactionId: txDraft.transactionId,
+        transactionId: freshTransactionId, // use the local var, not txDraft.transactionId (state hasn't updated yet)
         recipient: {
           name: txDraft.recipientName,
           accountNumber: txDraft.recipientAccountNumber,
@@ -197,13 +249,12 @@ export default function App() {
         },
         amount: txDraft.amount,
         reference: txDraft.reference,
-      });
+      }, session.token);
 
-      // STEP 2: launch Scam2Safe challenge (unchanged)
       const result = await apiPost('/api/transactions/challenge', {
         email: txDraft.email,
-        transactionId: txDraft.transactionId,
-      });
+        transactionId: freshTransactionId,
+      }, session.token);
       setChallenge(result);
       setScreen({ name: 'challenge', mode: 'transaction' });
       setApiState((s) => ({ ...s, lastCallResponse: result }));
@@ -239,7 +290,7 @@ export default function App() {
         transactionId: txDraft.transactionId,
         sessionId: challenge.sessionId,
         registerInputs,
-      });
+      },session.token);
 
       setApiState((s) => ({ ...s, lastCallResponse: result }));
       setSuccessData(result);
@@ -257,11 +308,42 @@ export default function App() {
     }
   }
 
+  async function registerPasskey() {
+    setPasskeyBusy(true);
+    setPasskeyStatus(null);
+    try {
+      const options = await apiPost('/api/passkey/register-options', { email: txDraft.email },session.token);
+      const response = await startRegistration(options);
+      await apiPost('/api/passkey/register-verify', { email: txDraft.email, response },session.token);
+      setPasskeyStatus({ type: 'success', message: 'Passkey registered. You can now use it to recover your account.' });
+    } catch (e) {
+      setPasskeyStatus({ type: 'error', message: e?.message || 'Passkey registration failed.' });
+    } finally {
+      setPasskeyBusy(false);
+    }
+  }
+
+  async function recoverWithPasskey() {
+    setPasskeyBusy(true);
+    setPasskeyStatus(null);
+    try {
+      const options = await apiPost('/api/passkey/auth-options', { email: txDraft.email },session.token);
+      const response = await startAuthentication(options);
+      await apiPost('/api/passkey/auth-verify', { email: txDraft.email, response },session.token);
+      setPasskeyStatus({ type: 'success', message: 'Verified with passkey. Account access restored.' });
+      setScreen({ name: 'transactionForm' });
+    } catch (e) {
+      setPasskeyStatus({ type: 'error', message: e?.message || 'Passkey recovery failed.' });
+    } finally {
+      setPasskeyBusy(false);
+    }
+  }
+
   async function startRecovery(email) {
     resetChallengeState();
     setApiState({ lastCallLabel: 'POST /api/recovery/start', lastCallAt: Date.now() });
     try {
-      const result = await apiPost('/api/recovery/start', { email });
+      const result = await apiPost('/api/recovery/start', { email },session.token);
       setChallenge(result);
       setScreen({ name: 'recoveryChallenge', mode: 'recovery' });
       setApiState((s) => ({ ...s, lastCallResponse: result }));
@@ -290,9 +372,88 @@ export default function App() {
         </div>
       </header>
 
+      {session.email ? (
+        <button className="btnGhost" onClick={() => { setSession({ token: null, email: null }); setScreen({ name: 'login' }); }}>
+          Sign out ({session.email})
+        </button>
+      ) : null}
+
       <main className="stage">
         <div className="phoneFrame">
           <div className="phoneNotch" />
+
+          {screen.name === 'login' ? (
+            <section className="screen fadeIn">
+              <div className="screenEyebrow">Sign in</div>
+              <h1 className="screenTitle">Welcome to BankGuard</h1>
+              <p className="screenMuted">Enter your email to begin identity verification.</p>
+
+              <label className="field">
+                <span className="fieldLabel">Email</span>
+                <input
+                  className="fieldInput"
+                  type="email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                />
+              </label>
+
+              <button className="btnPrimary" onClick={startLogin} disabled={loginPending}>
+                {loginPending ? 'Starting…' : 'Continue'}
+              </button>
+
+              {loginError ? <div className="warnCard">{loginError}</div> : null}
+            </section>
+          ) : null}
+
+            {screen.name === 'loginChallenge' ? (
+              <section className="screen fadeIn">
+                <div className="screenEyebrow">Verify</div>
+                <h1 className="screenTitle">Identity check</h1>
+                <p className="screenMuted">Find your secret number, then complete your register row.</p>
+
+                <div className="challengeGrid">
+                  {(loginChallenge?.boxes || []).map((box, i) => (
+                    <div key={i} className="challengeCard">
+                      <div className="challengeMask">{box.name}</div>
+                        <div className="challengeValue" style={{ fontSize: '0.85rem', display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
+                          {box.numbers.map((n, j) => (
+                            <span key={j}>{n}</span>
+                          ))}
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              minWidth: 22,
+                              padding: '1px 4px',
+                              borderRadius: '50%',
+                              border: '2px solid var(--gold)',
+                              fontWeight: 700,
+                              color: 'var(--navy)',
+                            }}
+                          >
+                            {box.circled}
+                          </span>
+                        </div>
+                    </div>
+                  ))}
+                </div>
+
+                <RegisterLetters
+                  letters={loginChallenge?.registerLetters || []}
+                  values={loginOtp}
+                  onChange={setLoginOtp}
+                  error={!!loginError}
+                />
+
+                <button className="btnPrimary" onClick={verifyLogin} disabled={loginPending}>
+                  {loginPending ? 'Verifying…' : 'Verify & sign in'}
+                </button>
+
+                {loginError ? <div className="errorInline">{loginError}</div> : null}
+              </section>
+            ) : null}
 
           {screen.name === 'transactionForm' ? (
             <section className="screen fadeIn">
@@ -382,6 +543,12 @@ export default function App() {
                 <div className="receiptRow"><span>Reference</span><span className="mono">{txDraft.transactionId}</span></div>
               </div>
 
+              {passkeyStatus ? (
+                <div className={passkeyStatus.type === 'success' ? 'okCard' : 'warnCard'}>
+                  {passkeyStatus.message}
+                </div>
+              ) : null}
+
               <div className="protectedNotice">
                 <ShieldIcon size={16} />
                 <div>
@@ -464,6 +631,15 @@ export default function App() {
                 <div className="receiptRow"><span>Payout ID</span><span className="mono">{successData?.payoutId || '—'}</span></div>
               </div>
 
+              <button
+                className="btnGhost"
+                onClick={registerPasskey}
+                disabled={passkeyBusy}
+                style={{ border: '1px solid var(--line)', color: 'var(--navy)' }}
+              >
+                {passkeyBusy ? 'Setting up passkey…' : '+ Add a passkey for faster recovery'}
+              </button>
+              
               <button className="btnPrimary" onClick={() => setScreen({ name: 'transactionForm' })}>
                 Done
               </button>
@@ -488,7 +664,7 @@ export default function App() {
             <section className="screen fadeIn">
               <div className="screenEyebrow">Recovery</div>
               <h1 className="screenTitle">Recover your account</h1>
-              <p className="screenMuted">Recovery uses your Visual Password to confirm it's you.</p>
+              <p className="screenMuted">Use your passkey for instant recovery, or verify by email.</p>
 
               <label className="field">
                 <span className="fieldLabel">Email</span>
@@ -500,8 +676,20 @@ export default function App() {
                 />
               </label>
 
-              <button className="btnPrimary" onClick={() => startRecovery(txDraft.email)}>
-                Send verification
+              <button className="btnPrimary" onClick={recoverWithPasskey} disabled={passkeyBusy}>
+                {passkeyBusy ? 'Verifying passkey…' : '🔑 Recover with Passkey'}
+              </button>
+
+              {passkeyStatus ? (
+                <div className={passkeyStatus.type === 'success' ? 'okCard' : 'warnCard'}>
+                  {passkeyStatus.message}
+                </div>
+              ) : null}
+
+              <div className="dividerRow"><span>or</span></div>
+
+              <button className="btnGhost" onClick={() => startRecovery(txDraft.email)} style={{ border: '1px solid var(--line)' }}>
+                Send email verification instead
               </button>
 
               <button className="btnGhost" onClick={() => setScreen({ name: 'transactionForm' })}>
@@ -541,6 +729,9 @@ button,input{font-family:inherit;}
 .brandSub{font-size:0.72rem;color:rgba(255,255,255,0.55);letter-spacing:0.03em;}
 .headerMeta{display:flex;align-items:center;gap:8px;font-size:0.76rem;color:rgba(255,255,255,0.6);}
 .statusDot{width:7px;height:7px;border-radius:50%;background:#3ED598;box-shadow:0 0 0 3px rgba(62,213,152,0.18);}
+.okCard{padding:12px 14px;border-radius:11px;background:rgba(27,122,74,0.08);border:1px solid rgba(27,122,74,0.22);color:var(--good);font-size:0.83rem;line-height:1.5;}
+.dividerRow{display:flex;align-items:center;gap:10px;color:var(--mute);font-size:0.78rem;margin:2px 0;}
+.dividerRow::before,.dividerRow::after{content:'';flex:1;height:1px;background:var(--line);}
 
 .stage{flex:1;display:flex;align-items:center;justify-content:center;padding:40px 20px;}
 
