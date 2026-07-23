@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-const baseApiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+const baseApiUrl = import.meta.env.VITE_API_BASE_URL;
 
 async function apiPost(path, body) {
   const response = await fetch(`${baseApiUrl}${path}`, {
