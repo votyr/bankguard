@@ -7,16 +7,41 @@ import {
   verifyLoginChallenge,
 } from "../services/VisualPasswordService.js";
 
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", chunk => {
+      raw += chunk;
+      if (raw.length > 100000) req.destroy();
+    });
+    req.on("end", () => {
+      try {
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch {
+        reject(new Error("Invalid JSON body"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function send(res, status, body) {
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+  });
+  res.end(JSON.stringify(body));
+}
+
 const routes = {
-  "/api/transactions/challenge": startTransactionChallenge,
-  "/api/recovery/start": triggerRecoveryEmail,
-  "/api/auth/login-start": startLoginChallenge,
-  // "/api/auth/login-verify" handled separately below, not via generic dispatch
+  "/transactions/challenge": startTransactionChallenge,
+  "/recovery/start": triggerRecoveryEmail,
+  "/auth/login-start": startLoginChallenge,
 };
 
 export default {
   async handle(req, res) {
-    if (req.url === "/api/auth/login-verify") {
+    if (req.url === "/auth/login-verify") {
       try {
         const body = await readBody(req);
         const scamResult = await verifyLoginChallenge(body);
