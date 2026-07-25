@@ -41,6 +41,7 @@ const routes = {
 
 export default {
   async handle(req, res) {
+    console.log("[VPC] url:", JSON.stringify(req.url));
     if (req.url === "/api/auth/login-verify") {
       try {
         const body = await readBody(req);
