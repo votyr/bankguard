@@ -7,10 +7,22 @@ import {
 
 export async function createPayment(body, req) {
   const user = getAuthedUser(req);
-  return createPaymentService({ ...body, ownerEmail: user.email, visualPasswordValue: user.visualPasswordValue });
+  return createPaymentService({
+    ...body,
+    ownerEmail: user.email,
+    visualPasswordValue: user.visualPasswordValue,
+    registerLetters: user.registerLetters,
+    pos1: user.pos1,
+    pos2: user.pos2,
+  });
 }
 
 export async function confirmPayment(body, req) {
   const email = getAuthedEmail(req);
   return confirmPaymentService({ ...body, ownerEmail: email });
+}
+
+export async function getPaymentStatusHandler(transactionId, req) {
+  const email = getAuthedEmail(req);
+  return getPaymentStatus(transactionId, email);
 }

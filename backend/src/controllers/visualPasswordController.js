@@ -14,24 +14,22 @@ export default {
       try {
         const body = await readBody(req);
         const scamResult = await verifyLoginChallenge(body);
-        // scamResult must include { user: { id, email }, visualPasswordValue }
 
         const token = jwt.sign(
           {
             userId: scamResult.user.id,
             email: scamResult.user.email,
             visualPasswordValue: scamResult.visualPasswordValue,
+            registerLetters: scamResult.registerLetters,
+            pos1: scamResult.pos1,
+            pos2: scamResult.pos2,
           },
           config.JWT_SECRET,
           { expiresIn: "12h" }
         );
 
-        return send(res, 200, {
-          success: true,
-          message: scamResult.message,
-          token,
-          user: scamResult.user,
-        });
+        return send(res, 200, { success: true, message: scamResult.message, token, user: scamResult.user });
+
       } catch (error) {
         const status = error.response?.status || error.status || 502;
         const message = error.response?.data?.error || error.message || "Login verification failed";
