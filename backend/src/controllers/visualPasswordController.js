@@ -1,5 +1,11 @@
 import jwt from "jsonwebtoken";
 import { config } from "../config/loadEnv.js"; // adjust path if different
+import {
+  startTransactionChallenge,
+  triggerRecoveryEmail,
+  startLoginChallenge,
+  verifyLoginChallenge,
+} from "../services/VisualPasswordService.js";
 
 const routes = {
   "/api/transactions/challenge": startTransactionChallenge,
