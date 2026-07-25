@@ -9,12 +9,18 @@ const paymentSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ["PENDING", "VERIFYING", "PROCESSING", "SUCCESS", "FAILED", "VERIFICATION_FAILED"],
-      default: "PENDING",
+      default: "PENDING_VERIFICATION",
     },
     razorpayPayoutId: { type: String },
     razorpayStatus: { type: String },
-  },
-  { timestamps: true }
+    timestamps: true ,
+    verificationValue: Number,
+    expectedLetters: [String],
+    recipientCode: Number,
+    amountCode: Number,
+    verifiedRecipientName: String,
+    ownerEmail: String,
+  }
 );
 
 export default mongoose.model("Payment", paymentSchema);

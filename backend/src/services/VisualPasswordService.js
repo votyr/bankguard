@@ -42,25 +42,6 @@ export async function startTransactionChallenge({ email, transactionId }) {
     return data;
 }
 
-export async function verifyTransactionChallenge({
-    sessionId,
-    registerInputs,
-    }) {
-    const { data } = await sdk.post(
-        "/api/sdk/numbers/transaction/verify",
-        {
-        sessionId,
-        registerInputs,
-        }
-    );
-
-    if (!data.success) {
-        throw new Error(data.error || "Verification failed");
-    }
-
-    return data;
-}
-
 // --- Recovery (unchanged, still word-based unless you also migrated this) ---
 export async function triggerRecoveryEmail({ email }) {
     const { data } = await sdk.post("/api/sdk/recovery/start", { email });

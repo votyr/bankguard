@@ -1,4 +1,4 @@
-import { getAuthedEmail } from "../services/requireAuth.js";
+import { getAuthedEmail, getAuthedUser } from "../services/requireAuth.js";
 import {
   createPayment as createPaymentService,
   confirmPayment as confirmPaymentService,
@@ -6,19 +6,11 @@ import {
 } from "../services/paymentsService.js";
 
 export async function createPayment(body, req) {
-  const email = getAuthedEmail(req);
-  return createPaymentService({ ...body, ownerEmail: email });
+  const user = getAuthedUser(req);
+  return createPaymentService({ ...body, ownerEmail: user.email, visualPasswordValue: user.visualPasswordValue });
 }
 
 export async function confirmPayment(body, req) {
-  console.log("========== CONFIRM PAYMENT ==========");
-  console.log(JSON.stringify(body, null, 2));
-
   const email = getAuthedEmail(req);
   return confirmPaymentService({ ...body, ownerEmail: email });
-}
-
-export async function getPaymentStatusHandler(transactionId, req) {
-  const email = getAuthedEmail(req);
-  return getPaymentStatus(transactionId, email);
 }

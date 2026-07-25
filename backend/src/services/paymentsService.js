@@ -11,7 +11,7 @@ export async function createPayment({ transactionId, recipient, amount, referenc
   return { status: payment.status, transactionId: payment.transactionId };
 }
 
-export async function confirmPayment({ transactionId }) {
+export async function confirmPayment({ transactionId, enteredLetters, enteredRecipientName }) {
   const payment = await Payment.findOne({ transactionId });
   if (!payment) {
     const err = new Error("Payment not found or expired");
