@@ -34,14 +34,14 @@ function send(res, status, body) {
 }
 
 const routes = {
-  "/transactions/challenge": startTransactionChallenge,
-  "/recovery/start": triggerRecoveryEmail,
-  "/auth/login-start": startLoginChallenge,
+  "/api/transactions/challenge": startTransactionChallenge,
+  "/api/recovery/start": triggerRecoveryEmail,
+  "/api/auth/login-start": startLoginChallenge,
 };
 
 export default {
   async handle(req, res) {
-    if (req.url === "/auth/login-verify") {
+    if (req.url === "/api/auth/login-verify") {
       try {
         const body = await readBody(req);
         const scamResult = await verifyLoginChallenge(body);
